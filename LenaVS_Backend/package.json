@@ -23,7 +23,8 @@
     "jimp": "^0.22.10",
     "express-validator": "^7.0.1",
     "compression": "^1.7.4",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.8"
   },
   "devDependencies": {
     "nodemon": "^3.0.3"
