@@ -1,46 +1,47 @@
-import jwt from 'jsonwebtoken';
-import { supabaseConfig } from '../config/supabase.js';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 /**
  * Middleware de autenticação
- * Valida o token JWT do Supabase
+ * Valida o token JWT do Supabase corretamente
  */
 export const authenticateToken = async (req, res, next) => {
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
 
     if (!token) {
-      return res.status(401).json({ 
-        error: 'Token de autenticação não fornecido' 
+      return res.status(401).json({
+        error: 'Token de autenticação não fornecido'
       });
     }
 
-    // Verificar e decodificar o token usando a chave pública do Supabase
-    const decoded = jwt.verify(token, supabaseConfig.jwtSecret, {
-      algorithms: ['HS256']
-    });
+    // Validação correta via Supabase
+    const { data, error } = await supabase.auth.getUser(token);
 
-    // Adicionar informações do usuário à requisição
+    if (error || !data?.user) {
+      return res.status(403).json({
+        error: 'Token inválido'
+      });
+    }
+
+    // Usuário autenticado
     req.user = {
-      id: decoded.sub,
-      email: decoded.email,
-      role: decoded.role || 'user'
+      id: data.user.id,
+      email: data.user.email,
+      role: data.user.role || 'user'
     };
 
     next();
-  } catch (error) {
-    console.error('Erro na autenticação:', error);
-    
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Token expirado' });
-    }
-    
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(403).json({ error: 'Token inválido' });
-    }
-
-    return res.status(500).json({ error: 'Erro ao validar token' });
+  } catch (err) {
+    console.error('Erro na autenticação:', err);
+    return res.status(500).json({
+      error: 'Erro interno de autenticação'
+    });
   }
 };
 
@@ -50,24 +51,23 @@ export const authenticateToken = async (req, res, next) => {
  */
 export const optionalAuth = async (req, res, next) => {
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
 
-    if (token) {
-      const decoded = jwt.verify(token, supabaseConfig.jwtSecret, {
-        algorithms: ['HS256']
-      });
+    if (!token) return next();
 
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (!error && data?.user) {
       req.user = {
-        id: decoded.sub,
-        email: decoded.email,
-        role: decoded.role || 'user'
+        id: data.user.id,
+        email: data.user.email,
+        role: data.user.role || 'user'
       };
     }
 
     next();
-  } catch (error) {
-    // Continua sem autenticação
+  } catch {
     next();
   }
 };
