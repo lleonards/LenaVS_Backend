@@ -4,8 +4,9 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
 import dotenv from 'dotenv';
+import path from 'path';
 
-// Importar rotas
+// Rotas
 import lyricsRoutes from './routes/lyrics.js';
 import videoRoutes from './routes/video.js';
 import projectRoutes from './routes/projects.js';
@@ -17,20 +18,49 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Configuração de CORS
-const corsOptions = {
-  origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173'],
-  credentials: true,
-  optionsSuccessStatus: 200
-};
+/* =====================================================
+   🔓 CORS LIVRE PARA MÍDIA (OBRIGATÓRIO)
+===================================================== */
+app.use('/uploads', cors({ origin: '*' }));
 
-// Middlewares globais
-app.use(helmet());
-app.use(cors(corsOptions));
+/* =====================================================
+   📂 SERVIR UPLOADS PUBLICAMENTE
+===================================================== */
+app.use(
+  '/uploads',
+  express.static(path.join(process.cwd(), 'uploads'), {
+    setHeaders: (res) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    }
+  })
+);
+
+/* =====================================================
+   🌐 CORS PARA API (COM TOKEN)
+===================================================== */
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGINS?.split(',') || '*',
+    credentials: true
+  })
+);
+
+/* =====================================================
+   🧱 MIDDLEWARES GLOBAIS
+===================================================== */
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false
+  })
+);
+
 app.use(morgan('combined'));
 app.use(compression());
 
-// Body parsers (exceto para webhook de pagamento)
+/* =====================================================
+   📦 BODY PARSERS
+===================================================== */
 app.use((req, res, next) => {
   if (req.originalUrl === '/api/payment/webhook') {
     next();
@@ -41,12 +71,13 @@ app.use((req, res, next) => {
 
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Rota de health check
+/* =====================================================
+   ❤️ HEALTH CHECK
+===================================================== */
 app.get('/', (req, res) => {
   res.json({
     success: true,
     message: 'LenaVS Backend API',
-    version: '1.0.0',
     status: 'online'
   });
 });
@@ -59,17 +90,18 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Rotas da API
+/* =====================================================
+   🚀 ROTAS DA API
+===================================================== */
 app.use('/api/lyrics', lyricsRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/payment', paymentRoutes);
 
-// Servir arquivos estáticos (uploads)
-app.use('/uploads', express.static('uploads'));
-
-// Tratamento de rotas não encontradas
+/* =====================================================
+   ❌ 404
+===================================================== */
 app.use((req, res) => {
   res.status(404).json({
     error: 'Rota não encontrada',
@@ -77,21 +109,19 @@ app.use((req, res) => {
   });
 });
 
-// Tratamento global de erros
+/* =====================================================
+   💥 ERRO GLOBAL
+===================================================== */
 app.use((err, req, res, next) => {
   console.error('Erro não tratado:', err);
-  
   res.status(err.status || 500).json({
-    error: err.message || 'Erro interno do servidor',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    error: err.message || 'Erro interno'
   });
 });
 
-// Iniciar servidor
+/* =====================================================
+   ▶ START
+===================================================== */
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 LenaVS Backend rodando na porta ${PORT}`);
-  console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`📝 Logs: ${process.env.NODE_ENV === 'production' ? 'production' : 'development'} mode`);
 });
-
-export default app;
