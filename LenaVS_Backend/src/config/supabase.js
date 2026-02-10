@@ -6,7 +6,7 @@ dotenv.config();
 // Cliente Supabase para operações administrativas
 export const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 // Cliente Supabase para operações do usuário (anon key)
