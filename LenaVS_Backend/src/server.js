@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import compression from 'compression';
 import dotenv from 'dotenv';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Rotas
 import lyricsRoutes from './routes/lyrics.js';
@@ -18,37 +19,68 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-/* =====================================================
-   🔓 CORS LIVRE PARA MÍDIA (OBRIGATÓRIO)
-===================================================== */
-app.use('/uploads', cors({ origin: '*' }));
+// Corrigir __dirname no ESModules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /* =====================================================
-   📂 SERVIR UPLOADS PUBLICAMENTE
+   🌍 CORS CONFIGURADO CORRETAMENTE
 ===================================================== */
+
+const allowedOrigins = [
+  'https://www.lenavs.com',
+  'https://lenavs.com',
+  'https://lenavs-frontend.onrender.com',
+  'http://localhost:5173'
+];
+
 app.use(
-  '/uploads',
-  express.static(path.join(process.cwd(), 'uploads'), {
-    setHeaders: (res) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    }
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true
   })
 );
 
 /* =====================================================
-   🌐 CORS PARA API (COM TOKEN)
+   📂 SERVIR UPLOADS PUBLICAMENTE
 ===================================================== */
+
 app.use(
-  cors({
-    origin: process.env.CORS_ORIGINS?.split(',') || '*',
-    credentials: true
+  '/uploads',
+  express.static(path.join(__dirname, '../uploads'), {
+    setHeaders: (res, filePath) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+      if (filePath.endsWith('.mp3')) {
+        res.setHeader('Content-Type', 'audio/mpeg');
+      }
+      if (filePath.endsWith('.wav')) {
+        res.setHeader('Content-Type', 'audio/wav');
+      }
+      if (filePath.endsWith('.ogg')) {
+        res.setHeader('Content-Type', 'audio/ogg');
+      }
+      if (filePath.endsWith('.m4a')) {
+        res.setHeader('Content-Type', 'audio/mp4');
+      }
+      if (filePath.endsWith('.mp4')) {
+        res.setHeader('Content-Type', 'video/mp4');
+      }
+    }
   })
 );
 
 /* =====================================================
    🧱 MIDDLEWARES GLOBAIS
 ===================================================== */
+
 app.use(
   helmet({
     crossOriginResourcePolicy: false
@@ -61,6 +93,7 @@ app.use(compression());
 /* =====================================================
    📦 BODY PARSERS
 ===================================================== */
+
 app.use((req, res, next) => {
   if (req.originalUrl === '/api/payment/webhook') {
     next();
@@ -74,6 +107,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 /* =====================================================
    ❤️ HEALTH CHECK
 ===================================================== */
+
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -93,6 +127,7 @@ app.get('/health', (req, res) => {
 /* =====================================================
    🚀 ROTAS DA API
 ===================================================== */
+
 app.use('/api/lyrics', lyricsRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/projects', projectRoutes);
@@ -102,6 +137,7 @@ app.use('/api/payment', paymentRoutes);
 /* =====================================================
    ❌ 404
 ===================================================== */
+
 app.use((req, res) => {
   res.status(404).json({
     error: 'Rota não encontrada',
@@ -112,6 +148,7 @@ app.use((req, res) => {
 /* =====================================================
    💥 ERRO GLOBAL
 ===================================================== */
+
 app.use((err, req, res, next) => {
   console.error('Erro não tratado:', err);
   res.status(err.status || 500).json({
@@ -122,6 +159,7 @@ app.use((err, req, res, next) => {
 /* =====================================================
    ▶ START
 ===================================================== */
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 LenaVS Backend rodando na porta ${PORT}`);
 });
