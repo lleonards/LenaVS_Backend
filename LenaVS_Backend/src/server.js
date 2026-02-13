@@ -24,28 +24,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /* =====================================================
-   🌍 CORS CONFIGURADO CORRETAMENTE
+   🌍 CORS CONFIGURAÇÃO SIMPLIFICADA (CORRIGIDA)
 ===================================================== */
 
-const allowedOrigins = [
-  'https://www.lenavs.com',
-  'https://lenavs.com',
-  'https://lenavs-frontend.onrender.com',
-  'http://localhost:5173'
-];
+app.use(cors({
+  origin: [
+    'https://www.lenavs.com',
+    'https://lenavs.com',
+    'https://lenavs-frontend.onrender.com',
+    'http://localhost:5173'
+  ],
+  credentials: true
+}));
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true
-  })
-);
+// Permitir requisições OPTIONS (preflight)
+app.options('*', cors());
 
 /* =====================================================
    📂 SERVIR UPLOADS PUBLICAMENTE
