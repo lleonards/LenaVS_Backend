@@ -7,12 +7,14 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Rotas
+// ROTAS
 import lyricsRoutes from './routes/lyrics.js';
 import videoRoutes from './routes/video.js';
 import projectRoutes from './routes/projects.js';
 import supportRoutes from './routes/support.js';
 import paymentRoutes from './routes/payment.js';
+import authRoutes from './routes/auth.js';
+import userRoutes from './routes/user.js';
 
 dotenv.config();
 
@@ -24,7 +26,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /* =====================================================
-   🌍 CORS CONFIGURAÇÃO SIMPLIFICADA (CORRIGIDA)
+   🌍 CORS
 ===================================================== */
 
 app.use(cors({
@@ -37,7 +39,6 @@ app.use(cors({
   credentials: true
 }));
 
-// Permitir requisições OPTIONS (preflight)
 app.options('*', cors());
 
 /* =====================================================
@@ -51,21 +52,11 @@ app.use(
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 
-      if (filePath.endsWith('.mp3')) {
-        res.setHeader('Content-Type', 'audio/mpeg');
-      }
-      if (filePath.endsWith('.wav')) {
-        res.setHeader('Content-Type', 'audio/wav');
-      }
-      if (filePath.endsWith('.ogg')) {
-        res.setHeader('Content-Type', 'audio/ogg');
-      }
-      if (filePath.endsWith('.m4a')) {
-        res.setHeader('Content-Type', 'audio/mp4');
-      }
-      if (filePath.endsWith('.mp4')) {
-        res.setHeader('Content-Type', 'video/mp4');
-      }
+      if (filePath.endsWith('.mp3')) res.setHeader('Content-Type', 'audio/mpeg');
+      if (filePath.endsWith('.wav')) res.setHeader('Content-Type', 'audio/wav');
+      if (filePath.endsWith('.ogg')) res.setHeader('Content-Type', 'audio/ogg');
+      if (filePath.endsWith('.m4a')) res.setHeader('Content-Type', 'audio/mp4');
+      if (filePath.endsWith('.mp4')) res.setHeader('Content-Type', 'video/mp4');
     }
   })
 );
@@ -84,9 +75,10 @@ app.use(morgan('combined'));
 app.use(compression());
 
 /* =====================================================
-   📦 BODY PARSERS
+   📦 BODY PARSER
 ===================================================== */
 
+// IMPORTANTE: Stripe webhook precisa do body raw
 app.use((req, res, next) => {
   if (req.originalUrl === '/api/payment/webhook') {
     next();
@@ -121,6 +113,8 @@ app.get('/health', (req, res) => {
    🚀 ROTAS DA API
 ===================================================== */
 
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/lyrics', lyricsRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/projects', projectRoutes);
@@ -144,6 +138,7 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error('Erro não tratado:', err);
+
   res.status(err.status || 500).json({
     error: err.message || 'Erro interno'
   });
