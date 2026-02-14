@@ -1,17 +1,45 @@
 import express from 'express';
-import { uploadMedia, generateVideo, downloadVideo } from '../controllers/videoController.js';
+import {
+  uploadMedia,
+  generateVideo,
+  downloadVideo
+} from '../controllers/videoController.js';
+
 import { authenticateToken } from '../middleware/auth.js';
+import { requireActiveAccess } from '../middleware/requireActiveAccess.js';
 import { uploadFiles, handleUploadError } from '../middleware/upload.js';
 
 const router = express.Router();
 
-// Upload de arquivos de mídia
-router.post('/upload', authenticateToken, uploadFiles, handleUploadError, uploadMedia);
+/*
+  🔐 PROTEÇÃO:
+  1. Usuário precisa estar autenticado
+  2. Trial ativo OU assinatura ativa
+*/
 
-// Gerar vídeo final
-router.post('/generate', authenticateToken, generateVideo);
+// Upload de arquivos de mídia
+router.post(
+  '/upload',
+  authenticateToken,
+  requireActiveAccess,
+  uploadFiles,
+  handleUploadError,
+  uploadMedia
+);
+
+// Gerar vídeo final (🔥 mais importante)
+router.post(
+  '/generate',
+  authenticateToken,
+  requireActiveAccess,
+  generateVideo
+);
 
 // Download do vídeo gerado
-router.get('/download/:fileName', downloadVideo);
+// (Pode deixar público ou proteger se quiser)
+router.get(
+  '/download/:fileName',
+  downloadVideo
+);
 
 export default router;
