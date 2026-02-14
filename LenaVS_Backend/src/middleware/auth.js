@@ -6,7 +6,11 @@ const supabase = createClient(
 );
 
 /**
- * Verifica se o usuário tem acesso (trial ou assinatura ativa)
+ * Verifica se o usuário ainda tem acesso ao sistema
+ * Regras:
+ * - Assinatura ativa → acesso liberado
+ * - Trial válido → acesso liberado
+ * - Trial expirado → bloqueado
  */
 const checkUserAccess = async (userId) => {
   try {
@@ -16,42 +20,51 @@ const checkUserAccess = async (userId) => {
       .eq('id', userId)
       .single();
 
-    if (error || !data) {
-      console.error('Erro ao verificar assinatura:', error);
+    if (error) {
+      console.error('Erro ao buscar usuário:', error.message);
+      return false;
+    }
+
+    if (!data) {
+      console.error('Usuário não encontrado na tabela users');
       return false;
     }
 
     const now = new Date();
     const trialEnd = data.trial_end ? new Date(data.trial_end) : null;
 
-    const trialExpired = trialEnd && now > trialEnd;
     const isActiveSubscriber = data.subscription_status === 'active';
 
-    // Permite se:
-    // - trial ainda válido
-    // OU
-    // - assinatura ativa
-    if (!trialExpired || isActiveSubscriber) {
+    // Se assinatura ativa → libera direto
+    if (isActiveSubscriber) {
       return true;
     }
 
+    // Se está em trial e ainda não expirou → libera
+    if (data.subscription_status === 'trial' && trialEnd && now <= trialEnd) {
+      return true;
+    }
+
+    // Qualquer outro caso → bloqueia
     return false;
 
   } catch (err) {
-    console.error('Erro em checkUserAccess:', err);
+    console.error('Erro inesperado em checkUserAccess:', err);
     return false;
   }
 };
 
 
 /**
- * Middleware de autenticação + verificação de trial/assinatura
+ * Middleware principal de autenticação + verificação de acesso
  */
 export const authenticateToken = async (req, res, next) => {
   try {
 
     const authHeader = req.headers.authorization;
-    const token = authHeader?.split(' ')[1];
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.split(' ')[1]
+      : null;
 
     if (!token) {
       return res.status(401).json({
@@ -59,23 +72,23 @@ export const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // Valida token Supabase
+    // Valida token no Supabase
     const { data, error } = await supabase.auth.getUser(token);
 
     if (error || !data?.user) {
       return res.status(403).json({
-        error: 'Token inválido'
+        error: 'Token inválido ou expirado'
       });
     }
 
     const userId = data.user.id;
 
-    // Verifica trial / assinatura
+    // Verifica se pode acessar o sistema
     const hasAccess = await checkUserAccess(userId);
 
     if (!hasAccess) {
       return res.status(403).json({
-        error: 'Trial expirado. Assine para continuar usando o LenaVS.',
+        error: 'Seu período de teste expirou. Assine para continuar usando o LenaVS.',
         code: 'TRIAL_EXPIRED'
       });
     }
@@ -102,36 +115,34 @@ export const authenticateToken = async (req, res, next) => {
 
 
 /**
- * Middleware opcional (não bloqueia trial expirado)
+ * Middleware opcional
+ * Não bloqueia trial expirado
  * Usado para páginas públicas
  */
 export const optionalAuth = async (req, res, next) => {
-
   try {
 
     const authHeader = req.headers.authorization;
-    const token = authHeader?.split(' ')[1];
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.split(' ')[1]
+      : null;
 
     if (!token) return next();
 
     const { data, error } = await supabase.auth.getUser(token);
 
     if (!error && data?.user) {
-
       req.user = {
         id: data.user.id,
         email: data.user.email,
         role: data.user.role || 'user'
       };
-
     }
 
     next();
 
-  } catch {
-
+  } catch (err) {
+    console.error('Erro em optionalAuth:', err);
     next();
-
   }
-
 };
