@@ -3,14 +3,16 @@
  * Separa texto em estrofes e normaliza acentuação
  */
 
+import fs from 'fs';
+import path from 'path';
+import iconv from 'iconv-lite';
+
 /**
  * Normaliza texto preservando acentos e caracteres especiais
  */
 export const normalizeText = (text) => {
   if (!text) return '';
   
-  // Preserva acentos e ç
-  // Remove apenas caracteres de controle indesejados
   return text
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
@@ -19,17 +21,13 @@ export const normalizeText = (text) => {
 
 /**
  * Separa texto em estrofes
- * Se já tiver separação por linhas em branco, mantém
- * Caso contrário, separa automaticamente em blocos de 4 linhas
  */
 export const separateIntoStanzas = (text) => {
   const normalizedText = normalizeText(text);
   
-  // Verificar se já tem separação por linhas em branco
   const hasBlankLines = /\n\s*\n/.test(normalizedText);
   
   if (hasBlankLines) {
-    // Já tem estrofes separadas - mantém a estrutura
     const stanzas = normalizedText
       .split(/\n\s*\n/)
       .map(stanza => stanza.trim())
@@ -41,8 +39,10 @@ export const separateIntoStanzas = (text) => {
       message: 'Letra carregada com separação original preservada'
     };
   } else {
-    // Não tem separação - separa automaticamente em blocos de 4 linhas
-    const lines = normalizedText.split('\n').filter(line => line.trim().length > 0);
+    const lines = normalizedText
+      .split('\n')
+      .filter(line => line.trim().length > 0);
+    
     const stanzas = [];
     
     for (let i = 0; i < lines.length; i += 4) {
@@ -59,31 +59,45 @@ export const separateIntoStanzas = (text) => {
 };
 
 /**
+ * Lê arquivo .txt corrigindo automaticamente encoding
+ */
+const readTextFileWithEncodingFix = (filePath) => {
+  const buffer = fs.readFileSync(filePath);
+
+  // Tenta UTF-8 primeiro
+  const utf8Text = buffer.toString('utf8');
+
+  // Se detectar caractere inválido, converte de Windows-1252
+  if (utf8Text.includes('�')) {
+    return iconv.decode(buffer, 'win1252');
+  }
+
+  return utf8Text;
+};
+
+/**
  * Processa arquivo de letra (.txt, .docx, .pdf)
  */
 export const processLyricsFile = async (filePath) => {
-  const fs = await import('fs');
-  const path = await import('path');
-  
   const ext = path.extname(filePath).toLowerCase();
   let text = '';
   
   try {
     if (ext === '.txt') {
-      text = fs.readFileSync(filePath, 'utf-8');
-    } else if (ext === '.docx') {
-      // Para .docx seria necessário uma biblioteca como mammoth
-      // Por enquanto, retorna erro para implementação futura
+      text = readTextFileWithEncodingFix(filePath);
+    } 
+    else if (ext === '.docx') {
       throw new Error('Processamento de arquivos .docx será implementado em breve');
-    } else if (ext === '.pdf') {
-      // Para .pdf seria necessário uma biblioteca como pdf-parse
-      // Por enquanto, retorna erro para implementação futura
+    } 
+    else if (ext === '.pdf') {
       throw new Error('Processamento de arquivos .pdf será implementado em breve');
-    } else {
+    } 
+    else {
       throw new Error('Formato de arquivo não suportado');
     }
     
     return separateIntoStanzas(text);
+    
   } catch (error) {
     throw new Error(`Erro ao processar arquivo de letra: ${error.message}`);
   }
@@ -95,18 +109,15 @@ export const processLyricsFile = async (filePath) => {
 export const validateTimeFormat = (time) => {
   if (!time) return '00:00';
   
-  // Remove tudo que não é número
   const digits = time.replace(/\D/g, '');
-  
-  // Pega apenas os 4 primeiros dígitos
   const limited = digits.slice(0, 4).padStart(4, '0');
   
-  // Formata como mm:ss
   const minutes = limited.slice(0, 2);
   const seconds = limited.slice(2, 4);
   
-  // Valida segundos (máximo 59)
-  const validSeconds = Math.min(parseInt(seconds), 59).toString().padStart(2, '0');
+  const validSeconds = Math.min(parseInt(seconds), 59)
+    .toString()
+    .padStart(2, '0');
   
   return `${minutes}:${validSeconds}`;
 };
@@ -125,5 +136,7 @@ export const timeToSeconds = (time) => {
 export const secondsToTime = (seconds) => {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  return `${mins.toString().padStart(2, '0')}:${secs
+    .toString()
+    .padStart(2, '0')}`;
 };
