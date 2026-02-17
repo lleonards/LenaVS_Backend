@@ -6,6 +6,10 @@ import { promisify } from 'util';
 
 const unlinkAsync = promisify(fs.unlink);
 
+// Resolução padrão otimizada para VPS de 1GB
+const WIDTH = 1280;
+const HEIGHT = 720;
+
 /**
  * Obtém duração de um arquivo de áudio
  */
@@ -49,9 +53,11 @@ export const imageToVideo = async (imagePath, duration, outputPath) => {
       ])
       .outputOptions([
         '-c:v libx264',
+        '-preset veryfast', // Mais leve para VPS
         '-pix_fmt yuv420p',
         '-r 30'
       ])
+      .size(`${WIDTH}x${HEIGHT}`)
       .output(outputPath)
       .on('end', () => resolve(outputPath))
       .on('error', (err) => reject(err))
@@ -67,7 +73,6 @@ export const adjustVideoToAudioDuration = async (videoPath, audioDuration, outpu
 
   return new Promise((resolve, reject) => {
     if (videoDuration >= audioDuration) {
-      // Vídeo é mais longo - cortar
       ffmpeg()
         .input(videoPath)
         .setDuration(audioDuration)
@@ -76,7 +81,6 @@ export const adjustVideoToAudioDuration = async (videoPath, audioDuration, outpu
         .on('error', (err) => reject(err))
         .run();
     } else {
-      // Vídeo é mais curto - fazer loop
       const loops = Math.ceil(audioDuration / videoDuration);
       ffmpeg()
         .input(videoPath)
@@ -93,14 +97,14 @@ export const adjustVideoToAudioDuration = async (videoPath, audioDuration, outpu
 };
 
 /**
- * Redimensiona imagem para resolução 16:9 (1920x1080)
+ * Redimensiona imagem para resolução 16:9 (1280x720)
  */
 export const resizeImageTo16_9 = async (imagePath, outputPath) => {
   try {
     const image = await Jimp.read(imagePath);
     await image
-      .cover(1920, 1080)
-      .quality(90)
+      .cover(WIDTH, HEIGHT)
+      .quality(85) // Leve ajuste para reduzir peso
       .writeAsync(outputPath);
     return outputPath;
   } catch (error) {
@@ -109,15 +113,16 @@ export const resizeImageTo16_9 = async (imagePath, outputPath) => {
 };
 
 /**
- * Cria vídeo de fundo colorido
+ * Cria vídeo de fundo colorido em 720p
  */
 export const createColorBackground = (color, duration, outputPath) => {
   return new Promise((resolve, reject) => {
     ffmpeg()
-      .input(`color=c=${color}:s=1920x1080:d=${duration}`)
+      .input(`color=c=${color}:s=${WIDTH}x${HEIGHT}:d=${duration}`)
       .inputFormat('lavfi')
       .outputOptions([
         '-c:v libx264',
+        '-preset veryfast', // Mais leve
         '-pix_fmt yuv420p',
         '-r 30'
       ])
@@ -149,9 +154,7 @@ export const mergeVideoAndAudio = (videoPath, audioPath, outputPath) => {
 };
 
 /**
- * Gera vídeo final com legendas sobrepostas
- * Esta é uma versão simplificada - o overlay de texto seria feito no frontend
- * ou com bibliotecas mais avançadas
+ * Gera vídeo final
  */
 export const generateFinalVideo = async (backgroundPath, audioPath, outputPath) => {
   try {
