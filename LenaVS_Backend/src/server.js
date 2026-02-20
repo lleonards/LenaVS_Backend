@@ -42,6 +42,30 @@ app.use(cors({
 app.options('*', cors());
 
 /* =====================================================
+   🧱 MIDDLEWARES GLOBAIS
+===================================================== */
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false
+  })
+);
+
+app.use(morgan('combined'));
+app.use(compression());
+
+/* =====================================================
+   📦 BODY PARSER
+===================================================== */
+
+// 🔹 Stripe webhook precisa receber o body RAW
+app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
+
+// 🔹 Demais rotas usam JSON normal
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+/* =====================================================
    📂 SERVIR UPLOADS PUBLICAMENTE
 ===================================================== */
 
@@ -60,34 +84,6 @@ app.use(
     }
   })
 );
-
-/* =====================================================
-   🧱 MIDDLEWARES GLOBAIS
-===================================================== */
-
-app.use(
-  helmet({
-    crossOriginResourcePolicy: false
-  })
-);
-
-app.use(morgan('combined'));
-app.use(compression());
-
-/* =====================================================
-   📦 BODY PARSER
-===================================================== */
-
-// IMPORTANTE: Stripe webhook precisa do body raw
-app.use((req, res, next) => {
-  if (req.originalUrl === '/api/payment/webhook') {
-    next();
-  } else {
-    express.json({ limit: '50mb' })(req, res, next);
-  }
-});
-
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 /* =====================================================
    ❤️ HEALTH CHECK
