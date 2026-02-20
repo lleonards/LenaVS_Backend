@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import { createClient } from '@supabase/supabase-js';
 import {
   getAudioDuration,
   imageToVideo,
@@ -14,8 +15,13 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// URL base do backend (Render)
 const BASE_URL = process.env.BACKEND_URL || 'https://lenavs-backend.onrender.com';
+
+// 🔐 Supabase admin (service role)
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 /**
  * Upload de arquivos de mídia
@@ -26,7 +32,6 @@ export const uploadMedia = async (req, res) => {
 
     if (req.files) {
       const mapFile = (file) => {
-        // pega tudo após /uploads
         const relativePath = file.path.split('uploads')[1].replace(/\\/g, '/');
         return `${BASE_URL}/uploads${relativePath}`;
       };
@@ -57,6 +62,7 @@ export const uploadMedia = async (req, res) => {
       files: uploadedFiles,
       message: 'Arquivos enviados com sucesso'
     });
+
   } catch (error) {
     console.error('Erro no upload de mídia:', error);
     return res.status(500).json({ error: 'Erro ao fazer upload dos arquivos' });
@@ -70,20 +76,48 @@ export const generateVideo = async (req, res) => {
   let tempFiles = [];
 
   try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
     const {
       projectName,
       audioPath,
       backgroundType,
       backgroundPath,
-      backgroundColor,
-      stanzas
+      backgroundColor
     } = req.body;
 
     if (!projectName || !audioPath) {
       return res.status(400).json({ error: 'Dados insuficientes para gerar vídeo' });
     }
 
-    // converter URL pública em path real
+    // 🔎 Buscar plano e créditos
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('plan, credits')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
+      return res.status(403).json({ error: 'Usuário não encontrado' });
+    }
+
+    const isPro = user.plan === 'pro';
+
+    // ⚠ Se for free e não tiver créditos, bloquear
+    if (!isPro && (!user.credits || user.credits <= 0)) {
+      return res.status(403).json({
+        error: 'Créditos esgotados. Assine o plano Pro para continuar.'
+      });
+    }
+
+    // =============================
+    // 🎬 PROCESSAMENTO DO VÍDEO
+    // =============================
+
     const audioRealPath = path.join(
       __dirname,
       '../../uploads',
@@ -104,6 +138,7 @@ export const generateVideo = async (req, res) => {
       processedBackgroundPath = path.join(tempDir, `bg_video_${Date.now()}.mp4`);
       await adjustVideoToAudioDuration(realBg, audioDuration, processedBackgroundPath);
       tempFiles.push(processedBackgroundPath);
+
     } else if (backgroundType === 'image' && backgroundPath) {
       const realImg = path.join(__dirname, '../../uploads', backgroundPath.split('/uploads/')[1]);
       const resizedImage = path.join(tempDir, `resized_${Date.now()}.jpg`);
@@ -113,6 +148,7 @@ export const generateVideo = async (req, res) => {
       processedBackgroundPath = path.join(tempDir, `bg_image_${Date.now()}.mp4`);
       await imageToVideo(resizedImage, audioDuration, processedBackgroundPath);
       tempFiles.push(processedBackgroundPath);
+
     } else {
       processedBackgroundPath = path.join(tempDir, `bg_color_${Date.now()}.mp4`);
       await createColorBackground(backgroundColor || '000000', audioDuration, processedBackgroundPath);
@@ -123,6 +159,17 @@ export const generateVideo = async (req, res) => {
     const outputPath = path.join(tempDir, outputFileName);
 
     await generateFinalVideo(processedBackgroundPath, audioRealPath, outputPath);
+
+    // =============================
+    // 🔥 DECREMENTAR CRÉDITO (SE FREE)
+    // =============================
+
+    if (!isPro) {
+      await supabase
+        .from('users')
+        .update({ credits: user.credits - 1 })
+        .eq('id', userId);
+    }
 
     return res.status(200).json({
       success: true,
@@ -149,6 +196,7 @@ export const downloadVideo = async (req, res) => {
     }
 
     res.download(filePath, fileName);
+
   } catch (error) {
     console.error('Erro no download:', error);
     return res.status(500).json({ error: 'Erro ao fazer download do vídeo' });
