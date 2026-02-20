@@ -1,116 +1,124 @@
-/**
- * Controller de Pagamentos (Estrutura Genérica)
- * Esta é uma estrutura preparada para integração futura com qualquer provedor de pagamentos
- */
+import stripe from "../config/stripe.js";
 
 /**
- * Cria sessão de pagamento
- * Estrutura genérica que pode ser adaptada para Stripe, PayPal, Mercado Pago, etc.
+ * Cria sessão de pagamento Stripe
  */
 export const createPaymentSession = async (req, res) => {
   try {
-    const { planId, priceId, successUrl, cancelUrl } = req.body;
+    const { currency } = req.body;
     const userId = req.user.id;
+    const userEmail = req.user.email;
 
-    // TODO: Integrar com provedor de pagamentos
-    // Exemplo de estrutura para Stripe:
-    // const session = await stripe.checkout.sessions.create({
-    //   customer_email: req.user.email,
-    //   line_items: [{
-    //     price: priceId,
-    //     quantity: 1,
-    //   }],
-    //   mode: 'subscription', // ou 'payment' para pagamento único
-    //   success_url: successUrl,
-    //   cancel_url: cancelUrl,
-    //   metadata: {
-    //     userId: userId,
-    //     planId: planId
-    //   }
-    // });
+    if (!currency) {
+      return res.status(400).json({ error: "Moeda não informada" });
+    }
 
-    // Por enquanto, retorna estrutura de exemplo
+    const priceId =
+      currency === "USD"
+        ? process.env.STRIPE_PRICE_USD
+        : process.env.STRIPE_PRICE_BRL;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer_email: userEmail,
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      success_url: `${process.env.FRONTEND_URL}/success`,
+      cancel_url: `${process.env.FRONTEND_URL}/upgrade`,
+      metadata: {
+        userId: userId,
+      },
+    });
+
     return res.status(200).json({
       success: true,
-      message: 'Integração de pagamentos será configurada',
-      sessionId: 'EXAMPLE_SESSION_ID',
-      // Em produção: sessionUrl: session.url
-      sessionUrl: successUrl // Placeholder
+      sessionUrl: session.url,
     });
 
   } catch (error) {
-    console.error('Erro ao criar sessão de pagamento:', error);
-    return res.status(500).json({ error: 'Erro ao processar pagamento' });
+    console.error("Erro ao criar sessão Stripe:", error);
+    return res.status(500).json({ error: "Erro ao criar sessão de pagamento" });
   }
 };
 
 /**
- * Webhook para receber notificações do provedor de pagamentos
- * Esta rota deve ser configurada no painel do provedor de pagamentos
+ * Webhook Stripe
  */
 export const handlePaymentWebhook = async (req, res) => {
   try {
-    // TODO: Validar assinatura do webhook
-    // Exemplo para Stripe:
-    // const sig = req.headers['stripe-signature'];
-    // const event = stripe.webhooks.constructEvent(
-    //   req.body,
-    //   sig,
-    //   process.env.STRIPE_WEBHOOK_SECRET
-    // );
+    const sig = req.headers["stripe-signature"];
 
-    const event = req.body;
+    const event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
 
-    // TODO: Processar diferentes tipos de eventos
-    // switch (event.type) {
-    //   case 'checkout.session.completed':
-    //     // Atualizar assinatura do usuário
-    //     break;
-    //   case 'customer.subscription.deleted':
-    //     // Cancelar assinatura do usuário
-    //     break;
-    //   case 'invoice.payment_succeeded':
-    //     // Confirmar pagamento
-    //     break;
-    //   default:
-    //     console.log(`Evento não tratado: ${event.type}`);
-    // }
+    switch (event.type) {
 
-    console.log('Webhook recebido:', event.type);
+      case "checkout.session.completed":
+        const session = event.data.object;
+
+        const userId = session.metadata.userId;
+
+        console.log("Pagamento concluído para usuário:", userId);
+
+        // TODO: Atualizar plano no banco (Supabase)
+        // Exemplo:
+        // await supabase
+        //   .from("users")
+        //   .update({ plan: "pro", subscription_status: "active" })
+        //   .eq("id", userId);
+
+        break;
+
+      case "customer.subscription.deleted":
+        const subscription = event.data.object;
+
+        console.log("Assinatura cancelada:", subscription.id);
+
+        // TODO: Atualizar usuário para plano free
+
+        break;
+
+      default:
+        console.log(`Evento não tratado: ${event.type}`);
+    }
 
     return res.status(200).json({ received: true });
 
   } catch (error) {
-    console.error('Erro no webhook de pagamento:', error);
-    return res.status(400).json({ error: 'Erro ao processar webhook' });
+    console.error("Erro no webhook Stripe:", error);
+    return res.status(400).send(`Webhook Error: ${error.message}`);
   }
 };
 
 /**
- * Obtém status da assinatura do usuário
+ * Obtém status da assinatura
  */
 export const getSubscriptionStatus = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // TODO: Buscar status da assinatura no banco de dados ou provedor
-    // const subscription = await supabase
-    //   .from('subscriptions')
-    //   .select('*')
-    //   .eq('user_id', userId)
-    //   .single();
+    // Aqui você deve buscar no banco real
+    // Exemplo com Supabase depois
 
     return res.status(200).json({
       success: true,
       subscription: {
-        status: 'active', // Placeholder
-        plan: 'free',
-        expiresAt: null
-      }
+        status: "free",
+        plan: "free",
+        expiresAt: null,
+      },
     });
 
   } catch (error) {
-    console.error('Erro ao obter status de assinatura:', error);
-    return res.status(500).json({ error: 'Erro ao obter status de assinatura' });
+    console.error("Erro ao obter status:", error);
+    return res.status(500).json({ error: "Erro ao obter status" });
   }
 };
