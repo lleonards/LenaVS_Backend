@@ -17,15 +17,15 @@ const __dirname = path.dirname(__filename);
 
 const BASE_URL = process.env.BACKEND_URL || 'https://lenavs-backend.onrender.com';
 
-// 🔐 Supabase admin (service role)
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-/**
- * Upload de arquivos de mídia
- */
+/* =====================================================
+   📤 UPLOAD
+===================================================== */
+
 export const uploadMedia = async (req, res) => {
   try {
     const uploadedFiles = {};
@@ -36,25 +36,20 @@ export const uploadMedia = async (req, res) => {
         return `${BASE_URL}/uploads${relativePath}`;
       };
 
-      if (req.files.musicaOriginal) {
+      if (req.files.musicaOriginal)
         uploadedFiles.musicaOriginal = mapFile(req.files.musicaOriginal[0]);
-      }
 
-      if (req.files.musicaInstrumental) {
+      if (req.files.musicaInstrumental)
         uploadedFiles.musicaInstrumental = mapFile(req.files.musicaInstrumental[0]);
-      }
 
-      if (req.files.video) {
+      if (req.files.video)
         uploadedFiles.video = mapFile(req.files.video[0]);
-      }
 
-      if (req.files.imagem) {
+      if (req.files.imagem)
         uploadedFiles.imagem = mapFile(req.files.imagem[0]);
-      }
 
-      if (req.files.letra) {
+      if (req.files.letra)
         uploadedFiles.letra = mapFile(req.files.letra[0]);
-      }
     }
 
     return res.status(200).json({
@@ -69,9 +64,11 @@ export const uploadMedia = async (req, res) => {
   }
 };
 
-/**
- * Gera vídeo final com karaokê
- */
+/* =====================================================
+   🎬 GERAR VÍDEO
+   ❌ NÃO CONSOME CRÉDITO AQUI
+===================================================== */
+
 export const generateVideo = async (req, res) => {
   let tempFiles = [];
 
@@ -94,10 +91,10 @@ export const generateVideo = async (req, res) => {
       return res.status(400).json({ error: 'Dados insuficientes para gerar vídeo' });
     }
 
-    // 🔎 Buscar plano e créditos
+    // Apenas valida existência do usuário
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('plan, credits')
+      .select('id')
       .eq('id', userId)
       .single();
 
@@ -105,18 +102,9 @@ export const generateVideo = async (req, res) => {
       return res.status(403).json({ error: 'Usuário não encontrado' });
     }
 
-    const isPro = user.plan === 'pro';
-
-    // ⚠ Se for free e não tiver créditos, bloquear
-    if (!isPro && (!user.credits || user.credits <= 0)) {
-      return res.status(403).json({
-        error: 'Créditos esgotados. Assine o plano Pro para continuar.'
-      });
-    }
-
-    // =============================
-    // 🎬 PROCESSAMENTO DO VÍDEO
-    // =============================
+    /* =============================
+       🎬 PROCESSAMENTO DO VÍDEO
+    ============================= */
 
     const audioRealPath = path.join(
       __dirname,
@@ -160,17 +148,6 @@ export const generateVideo = async (req, res) => {
 
     await generateFinalVideo(processedBackgroundPath, audioRealPath, outputPath);
 
-    // =============================
-    // 🔥 DECREMENTAR CRÉDITO (SE FREE)
-    // =============================
-
-    if (!isPro) {
-      await supabase
-        .from('users')
-        .update({ credits: user.credits - 1 })
-        .eq('id', userId);
-    }
-
     return res.status(200).json({
       success: true,
       videoUrl: `${BASE_URL}/api/video/download/${outputFileName}`
@@ -183,11 +160,19 @@ export const generateVideo = async (req, res) => {
   }
 };
 
-/**
- * Download do vídeo final
- */
+/* =====================================================
+   ⬇ DOWNLOAD
+   🔥 CONSOME CRÉDITO AQUI
+===================================================== */
+
 export const downloadVideo = async (req, res) => {
   try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
     const { fileName } = req.params;
     const filePath = path.join(__dirname, '../../uploads/temp', fileName);
 
@@ -195,7 +180,53 @@ export const downloadVideo = async (req, res) => {
       return res.status(404).json({ error: 'Vídeo não encontrado' });
     }
 
-    res.download(filePath, fileName);
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('plan, credits, credits_reset_at, subscription_status')
+      .eq('id', userId)
+      .single();
+
+    if (error || !user) {
+      return res.status(403).json({ error: 'Usuário não encontrado' });
+    }
+
+    const now = new Date();
+    const lastReset = new Date(user.credits_reset_at);
+    const diffInDays = (now - lastReset) / (1000 * 60 * 60 * 24);
+
+    const isPro =
+      user.plan === 'pro' &&
+      user.subscription_status === 'active';
+
+    if (!isPro) {
+
+      // Reset automático 15 dias
+      if (diffInDays >= 15) {
+        await supabase
+          .from('users')
+          .update({
+            credits: 3,
+            credits_reset_at: now.toISOString()
+          })
+          .eq('id', userId);
+
+        user.credits = 3;
+      }
+
+      if (!user.credits || user.credits <= 0) {
+        return res.status(403).json({
+          error: 'Créditos esgotados. Faça upgrade para continuar.'
+        });
+      }
+
+      // 🔥 CONSUME CRÉDITO AGORA
+      await supabase
+        .from('users')
+        .update({ credits: user.credits - 1 })
+        .eq('id', userId);
+    }
+
+    return res.download(filePath, fileName);
 
   } catch (error) {
     console.error('Erro no download:', error);
