@@ -11,9 +11,10 @@ export const requireActiveAccess = async (req, res, next) => {
       return res.status(401).json({ error: 'Não autenticado' });
     }
 
+    // 🔎 Buscar dados necessários do usuário
     const { data: user, error } = await supabase
       .from('users')
-      .select('trial_end, subscription_status')
+      .select('plan, credits, subscription_status')
       .eq('id', req.user.id)
       .single();
 
@@ -21,19 +22,34 @@ export const requireActiveAccess = async (req, res, next) => {
       return res.status(403).json({ error: 'Usuário não encontrado' });
     }
 
-    const now = new Date();
-    const trialEnd = user.trial_end ? new Date(user.trial_end) : null;
+    const isPro =
+      user.plan === 'pro' &&
+      user.subscription_status === 'active';
 
-    const trialActive = trialEnd && trialEnd > now;
-    const subscriptionActive = user.subscription_status === 'active';
-
-    if (!trialActive && !subscriptionActive) {
-      return res.status(403).json({
-        error: 'Acesso expirado. Assine para continuar.'
-      });
+    // 🟢 Se for PRO, acesso liberado
+    if (isPro) {
+      return next();
     }
 
-    next();
+    // 🔓 Se for FREE, verificar créditos
+    if (user.plan === 'free') {
+
+      if (!user.credits || user.credits <= 0) {
+        return res.status(403).json({
+          error: 'Créditos esgotados. Assine o plano Pro para continuar.'
+        });
+      }
+
+      // 🔥 Importante:
+      // Não decrementamos aqui ainda.
+      // Vamos decrementar APÓS gerar vídeo com sucesso.
+      return next();
+    }
+
+    // Caso inesperado
+    return res.status(403).json({
+      error: 'Plano inválido ou acesso não permitido.'
+    });
 
   } catch (err) {
     console.error('Erro verificação acesso:', err);
