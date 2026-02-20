@@ -12,12 +12,22 @@ import { uploadFiles, handleUploadError } from '../middleware/upload.js';
 const router = express.Router();
 
 /*
-  🔐 PROTEÇÃO:
-  1. Usuário precisa estar autenticado
-  2. Trial ativo OU assinatura ativa
+  🔐 PROTEÇÃO OFICIAL DA LenaVS
+
+  Ordem de execução:
+  1️⃣ authenticateToken → valida JWT do Supabase
+  2️⃣ requireActiveAccess → valida:
+       - Se plano = pro → permite
+       - Se plano = free → verifica créditos
+       - Se credits > 0 → permite
+       - Se credits = 0 → bloqueia
+  3️⃣ Controller executa geração
 */
 
-// Upload de arquivos de mídia
+/* =====================================================
+   📤 Upload de mídia
+===================================================== */
+
 router.post(
   '/upload',
   authenticateToken,
@@ -27,7 +37,10 @@ router.post(
   uploadMedia
 );
 
-// Gerar vídeo final (🔥 mais importante)
+/* =====================================================
+   🎬 Gerar vídeo (ROTA CRÍTICA)
+===================================================== */
+
 router.post(
   '/generate',
   authenticateToken,
@@ -35,8 +48,11 @@ router.post(
   generateVideo
 );
 
-// Download do vídeo gerado
-// (Pode deixar público ou proteger se quiser)
+/* =====================================================
+   ⬇ Download de vídeo
+   (Pode proteger depois se quiser)
+===================================================== */
+
 router.get(
   '/download/:fileName',
   downloadVideo
