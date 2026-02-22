@@ -2,7 +2,9 @@ import stripe from "../config/stripe.js";
 import { supabase } from "../config/supabase.js";
 
 /**
- * Cria sessão de pagamento Stripe
+ * =====================================================
+ * 💳 CRIAR SESSÃO DE PAGAMENTO
+ * =====================================================
  */
 export const createPaymentSession = async (req, res) => {
   try {
@@ -18,6 +20,10 @@ export const createPaymentSession = async (req, res) => {
       currency === "USD"
         ? process.env.STRIPE_PRICE_USD
         : process.env.STRIPE_PRICE_BRL;
+
+    if (!priceId) {
+      return res.status(500).json({ error: "Price ID não configurado" });
+    }
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -43,13 +49,17 @@ export const createPaymentSession = async (req, res) => {
 
   } catch (error) {
     console.error("Erro ao criar sessão Stripe:", error);
-    return res.status(500).json({ error: "Erro ao criar sessão de pagamento" });
+    return res.status(500).json({
+      error: "Erro ao criar sessão de pagamento"
+    });
   }
 };
 
 
 /**
- * Webhook Stripe
+ * =====================================================
+ * 🔔 WEBHOOK STRIPE
+ * =====================================================
  */
 export const handlePaymentWebhook = async (req, res) => {
   try {
@@ -64,7 +74,7 @@ export const handlePaymentWebhook = async (req, res) => {
     switch (event.type) {
 
       /**
-       * PAGAMENTO CONFIRMADO
+       * ✅ Pagamento concluído
        */
       case "checkout.session.completed": {
         const session = event.data.object;
@@ -75,42 +85,36 @@ export const handlePaymentWebhook = async (req, res) => {
 
         console.log("Pagamento concluído para usuário:", userId);
 
-        const { error } = await supabase
+        await supabase
           .from("users")
           .update({
             plan: "pro",
             subscription_status: "active",
             stripe_customer_id: customerId,
             stripe_subscription_id: subscriptionId,
+            updated_at: new Date()
           })
           .eq("id", userId);
-
-        if (error) {
-          console.error("Erro ao atualizar usuário:", error);
-        }
 
         break;
       }
 
       /**
-       * ASSINATURA CANCELADA
+       * ❌ Assinatura cancelada
        */
       case "customer.subscription.deleted": {
         const subscription = event.data.object;
 
         console.log("Assinatura cancelada:", subscription.id);
 
-        const { error } = await supabase
+        await supabase
           .from("users")
           .update({
             plan: "free",
             subscription_status: "canceled",
+            updated_at: new Date()
           })
           .eq("stripe_subscription_id", subscription.id);
-
-        if (error) {
-          console.error("Erro ao cancelar assinatura:", error);
-        }
 
         break;
       }
@@ -129,32 +133,39 @@ export const handlePaymentWebhook = async (req, res) => {
 
 
 /**
- * Obtém status real da assinatura
+ * =====================================================
+ * 📊 STATUS DA ASSINATURA
+ * =====================================================
  */
 export const getSubscriptionStatus = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const { data, error } = await supabase
+    const { data: user, error } = await supabase
       .from("users")
-      .select("plan, subscription_status")
+      .select("plan, subscription_status, stripe_subscription_id")
       .eq("id", userId)
       .single();
 
-    if (error) {
-      return res.status(500).json({ error: "Erro ao buscar assinatura" });
+    if (error || !user) {
+      return res.status(404).json({
+        error: "Usuário não encontrado"
+      });
     }
 
     return res.status(200).json({
       success: true,
       subscription: {
-        status: data.subscription_status,
-        plan: data.plan,
+        plan: user.plan,
+        status: user.subscription_status,
+        subscriptionId: user.stripe_subscription_id || null
       },
     });
 
   } catch (error) {
     console.error("Erro ao obter status:", error);
-    return res.status(500).json({ error: "Erro ao obter status" });
+    return res.status(500).json({
+      error: "Erro ao obter status"
+    });
   }
 };
