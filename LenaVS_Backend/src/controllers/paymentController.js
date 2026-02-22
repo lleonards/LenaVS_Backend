@@ -1,4 +1,5 @@
 import stripe from "../config/stripe.js";
+import { supabase } from "../config/supabase.js";
 
 /**
  * Cria sessão de pagamento Stripe
@@ -46,6 +47,7 @@ export const createPaymentSession = async (req, res) => {
   }
 };
 
+
 /**
  * Webhook Stripe
  */
@@ -61,30 +63,57 @@ export const handlePaymentWebhook = async (req, res) => {
 
     switch (event.type) {
 
-      case "checkout.session.completed":
+      /**
+       * PAGAMENTO CONFIRMADO
+       */
+      case "checkout.session.completed": {
         const session = event.data.object;
 
         const userId = session.metadata.userId;
+        const customerId = session.customer;
+        const subscriptionId = session.subscription;
 
         console.log("Pagamento concluído para usuário:", userId);
 
-        // TODO: Atualizar plano no banco (Supabase)
-        // Exemplo:
-        // await supabase
-        //   .from("users")
-        //   .update({ plan: "pro", subscription_status: "active" })
-        //   .eq("id", userId);
+        const { error } = await supabase
+          .from("users")
+          .update({
+            plan: "pro",
+            subscription_status: "active",
+            stripe_customer_id: customerId,
+            stripe_subscription_id: subscriptionId,
+          })
+          .eq("id", userId);
+
+        if (error) {
+          console.error("Erro ao atualizar usuário:", error);
+        }
 
         break;
+      }
 
-      case "customer.subscription.deleted":
+      /**
+       * ASSINATURA CANCELADA
+       */
+      case "customer.subscription.deleted": {
         const subscription = event.data.object;
 
         console.log("Assinatura cancelada:", subscription.id);
 
-        // TODO: Atualizar usuário para plano free
+        const { error } = await supabase
+          .from("users")
+          .update({
+            plan: "free",
+            subscription_status: "canceled",
+          })
+          .eq("stripe_subscription_id", subscription.id);
+
+        if (error) {
+          console.error("Erro ao cancelar assinatura:", error);
+        }
 
         break;
+      }
 
       default:
         console.log(`Evento não tratado: ${event.type}`);
@@ -98,22 +127,29 @@ export const handlePaymentWebhook = async (req, res) => {
   }
 };
 
+
 /**
- * Obtém status da assinatura
+ * Obtém status real da assinatura
  */
 export const getSubscriptionStatus = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Aqui você deve buscar no banco real
-    // Exemplo com Supabase depois
+    const { data, error } = await supabase
+      .from("users")
+      .select("plan, subscription_status")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: "Erro ao buscar assinatura" });
+    }
 
     return res.status(200).json({
       success: true,
       subscription: {
-        status: "free",
-        plan: "free",
-        expiresAt: null,
+        status: data.subscription_status,
+        plan: data.plan,
       },
     });
 
