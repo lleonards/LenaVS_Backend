@@ -16,7 +16,7 @@ import paymentRoutes from './routes/payment.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 
-// ⚠ IMPORTANTE: importar webhook direto do controller
+// 🔥 Stripe Webhook
 import { handlePaymentWebhook } from './controllers/paymentController.js';
 
 dotenv.config();
@@ -24,7 +24,6 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Corrigir __dirname no ESModules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -32,20 +31,28 @@ const __dirname = path.dirname(__filename);
    🌍 CORS
 ===================================================== */
 
+const allowedOrigins = [
+  'https://www.lenavs.com',
+  'https://lenavs.com',
+  'https://lenavs-frontend.onrender.com',
+  'http://localhost:5173'
+];
+
 app.use(cors({
-  origin: [
-    'https://www.lenavs.com',
-    'https://lenavs.com',
-    'https://lenavs-frontend.onrender.com',
-    'http://localhost:5173'
-  ],
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Origem não permitida pelo CORS'));
+    }
+  },
   credentials: true
 }));
 
 app.options('*', cors());
 
 /* =====================================================
-   🧱 MIDDLEWARES GLOBAIS
+   🧱 SEGURANÇA E PERFORMANCE
 ===================================================== */
 
 app.use(
@@ -61,7 +68,6 @@ app.use(compression());
    🔥 STRIPE WEBHOOK (ANTES DO JSON)
 ===================================================== */
 
-// ⚠ Webhook precisa receber body RAW
 app.post(
   '/api/payment/webhook',
   express.raw({ type: 'application/json' }),
@@ -69,7 +75,7 @@ app.post(
 );
 
 /* =====================================================
-   📦 BODY PARSER NORMAL
+   📦 BODY PARSER
 ===================================================== */
 
 app.use(express.json({ limit: '50mb' }));
@@ -116,7 +122,7 @@ app.get('/health', (req, res) => {
 });
 
 /* =====================================================
-   🚀 ROTAS DA API
+   🚀 ROTAS
 ===================================================== */
 
 app.use('/api/auth', authRoutes);
@@ -146,7 +152,7 @@ app.use((err, req, res, next) => {
   console.error('Erro não tratado:', err);
 
   res.status(err.status || 500).json({
-    error: err.message || 'Erro interno'
+    error: err.message || 'Erro interno do servidor'
   });
 });
 
