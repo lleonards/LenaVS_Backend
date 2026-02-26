@@ -1,217 +1,158 @@
-import stripe from "../config/stripe.js";
-import { supabase } from "../config/supabase.js";
+import React, { useState } from 'react';
+import { Download, Loader } from 'lucide-react';
+import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import './ExportPanel.css';
 
-/* =====================================================
-   💳 CRIAR SESSÃO DE PAGAMENTO
-===================================================== */
+const ExportPanel = ({ stanzas, mediaFiles, audioType, backgroundColor }) => {
+  const [projectName, setProjectName] = useState('Meu_Projeto');
+  const [exportAudioType, setExportAudioType] = useState('original');
+  const [videoFormat, setVideoFormat] = useState('mp4');
+  const [loading, setLoading] = useState(false);
 
-export const createPaymentSession = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const userEmail = req.user.email;
-    const { currency } = req.body;
+  const { credits, plan, fetchSubscription } = useAuth();
+  const navigate = useNavigate();
 
-    if (!currency) {
-      return res.status(400).json({ error: "Moeda não informada" });
+  const handleExport = async () => {
+    if (!projectName.trim()) {
+      alert('Por favor, digite um nome para o projeto');
+      return;
     }
 
-    const priceId =
-      currency === "USD"
-        ? process.env.STRIPE_PRICE_USD
-        : process.env.STRIPE_PRICE_BRL;
-
-    if (!priceId) {
-      return res.status(500).json({ error: "Price ID não configurado" });
+    if (!mediaFiles.musicaOriginal && !mediaFiles.musicaInstrumental) {
+      alert('Por favor, faça upload de pelo menos um arquivo de áudio');
+      return;
     }
 
-    // 🔎 Verificar se já existe customer salvo
-    const { data: user } = await supabase
-      .from("users")
-      .select("stripe_customer_id")
-      .eq("id", userId)
-      .single();
+    // BLOQUEIO FRONTEND
+    if (plan === 'free' && credits <= 0) {
+      alert('Você está sem créditos. Faça upgrade para continuar.');
+      navigate('/upgrade');
+      return;
+    }
 
-    let customerId = user?.stripe_customer_id;
+    setLoading(true);
 
-    // 🆕 Criar cliente no Stripe se não existir
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: userEmail,
-        metadata: { userId }
+    try {
+      // Consumir crédito (somente FREE)
+      if (plan === 'free') {
+        await api.post('/user/consume-credit');
+      }
+
+      // Gerar vídeo
+      const response = await api.post('/video/generate', {
+        projectName,
+        audioType: exportAudioType,
+        audioPath:
+          exportAudioType === 'original'
+            ? mediaFiles.musicaOriginal
+            : mediaFiles.musicaInstrumental,
+        backgroundType: mediaFiles.video
+          ? 'video'
+          : mediaFiles.imagem
+          ? 'image'
+          : 'color',
+        backgroundPath: mediaFiles.video || mediaFiles.imagem,
+        backgroundColor,
+        stanzas,
+        videoFormat
       });
 
-      customerId = customer.id;
+      const videoUrl = response.data.videoUrl;
 
-      await supabase
-        .from("users")
-        .update({ stripe_customer_id: customerId })
-        .eq("id", userId);
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customerId,
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      success_url: `${process.env.FRONTEND_URL}/success`,
-      cancel_url: `${process.env.FRONTEND_URL}/upgrade`,
-      metadata: {
-        userId,
-      },
-    });
-
-    return res.status(200).json({
-      success: true,
-      sessionUrl: session.url,
-    });
-
-  } catch (error) {
-    console.error("Erro ao criar sessão Stripe:", error);
-    return res.status(500).json({
-      error: "Erro ao criar sessão de pagamento",
-    });
-  }
-};
-
-/* =====================================================
-   🔔 WEBHOOK STRIPE
-===================================================== */
-
-export const handlePaymentWebhook = async (req, res) => {
-  let event;
-
-  try {
-    const sig = req.headers["stripe-signature"];
-
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    console.error("Erro ao validar webhook:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  try {
-    switch (event.type) {
-
-      /* ==========================================
-         ✅ CHECKOUT CONCLUÍDO
-      ========================================== */
-      case "checkout.session.completed": {
-        const session = event.data.object;
-
-        const userId = session.metadata.userId;
-        const customerId = session.customer;
-        const subscriptionId = session.subscription;
-
-        await supabase
-          .from("users")
-          .update({
-            plan: "pro",
-            subscription_status: "active",
-            stripe_customer_id: customerId,
-            stripe_subscription_id: subscriptionId,
-            credits: null, // PRO não usa créditos
-            updated_at: new Date().toISOString()
-          })
-          .eq("id", userId);
-
-        console.log("Usuário atualizado para PRO:", userId);
-        break;
+      if (fetchSubscription) {
+        await fetchSubscription();
       }
 
-      /* ==========================================
-         ❌ ASSINATURA CANCELADA
-      ========================================== */
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object;
+      window.open(videoUrl, '_blank');
+      alert('Vídeo gerado com sucesso!');
 
-        await supabase
-          .from("users")
-          .update({
-            plan: "free",
-            subscription_status: "canceled",
-            credits: 0,
-            updated_at: new Date().toISOString()
-          })
-          .eq("stripe_subscription_id", subscription.id);
-
-        console.log("Usuário voltou para FREE");
-        break;
+    } catch (error) {
+      if (error.response?.status === 403) {
+        alert('Você está sem créditos. Faça upgrade para continuar.');
+        navigate('/upgrade');
+        return;
       }
 
-      /* ==========================================
-         🔄 ASSINATURA ATUALIZADA
-      ========================================== */
-      case "customer.subscription.updated": {
-        const subscription = event.data.object;
-
-        const status = subscription.status;
-
-        await supabase
-          .from("users")
-          .update({
-            subscription_status: status,
-            updated_at: new Date().toISOString()
-          })
-          .eq("stripe_subscription_id", subscription.id);
-
-        console.log("Status atualizado:", status);
-        break;
-      }
-
-      default:
-        console.log(`Evento não tratado: ${event.type}`);
+      console.error('Erro ao gerar vídeo:', error);
+      alert('Erro ao gerar vídeo. Verifique seus arquivos e tente novamente.');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    return res.status(200).json({ received: true });
+  return (
+    <div className="export-panel">
+      <h2>Exportar Vídeo</h2>
 
-  } catch (error) {
-    console.error("Erro processando webhook:", error);
-    return res.status(500).json({ error: "Erro interno webhook" });
-  }
+      <div className="export-form">
+        <div className="form-group">
+          <label>Nome do Projeto</label>
+          <input
+            type="text"
+            value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
+            placeholder="Digite o nome do projeto"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Tipo de Áudio</label>
+          <div className="audio-type-selector">
+            <button
+              type="button"
+              className={exportAudioType === 'original' ? 'active' : ''}
+              onClick={() => setExportAudioType('original')}
+              disabled={!mediaFiles.musicaOriginal}
+            >
+              Música Original
+            </button>
+
+            <button
+              type="button"
+              className={exportAudioType === 'instrumental' ? 'active' : ''}
+              onClick={() => setExportAudioType('instrumental')}
+              disabled={!mediaFiles.musicaInstrumental}
+            >
+              Playback
+            </button>
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label>Formato do Vídeo</label>
+          <select
+            value={videoFormat}
+            onChange={(e) => setVideoFormat(e.target.value)}
+          >
+            <option value="mp4">MP4</option>
+            <option value="avi">AVI</option>
+            <option value="mov">MOV</option>
+            <option value="mkv">MKV</option>
+          </select>
+        </div>
+
+        <button
+          className="export-btn"
+          onClick={handleExport}
+          disabled={loading}
+        >
+          {loading ? (
+            <>
+              <Loader size={20} className="spinner" />
+              Gerando vídeo...
+            </>
+          ) : (
+            <>
+              <Download size={20} />
+              EXPORTAR VÍDEO
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
 };
 
-/* =====================================================
-   📊 STATUS DA ASSINATURA
-===================================================== */
-
-export const getSubscriptionStatus = async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    const { data: user, error } = await supabase
-      .from("users")
-      .select("plan, subscription_status, stripe_subscription_id")
-      .eq("id", userId)
-      .single();
-
-    if (error || !user) {
-      return res.status(404).json({
-        error: "Usuário não encontrado",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      subscription: {
-        plan: user.plan,
-        status: user.subscription_status,
-        subscriptionId: user.stripe_subscription_id || null,
-      },
-    });
-
-  } catch (error) {
-    console.error("Erro ao obter status:", error);
-    return res.status(500).json({
-      error: "Erro ao obter status",
-    });
-  }
-};
+export default ExportPanel;
