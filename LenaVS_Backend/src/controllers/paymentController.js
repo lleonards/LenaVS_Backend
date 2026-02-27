@@ -1,158 +1,95 @@
-import React, { useState } from 'react';
-import { Download, Loader } from 'lucide-react';
-import api from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import './ExportPanel.css';
+import stripe from '../config/stripe.js';
+import supabase from '../config/supabase.js';
 
-const ExportPanel = ({ stanzas, mediaFiles, audioType, backgroundColor }) => {
-  const [projectName, setProjectName] = useState('Meu_Projeto');
-  const [exportAudioType, setExportAudioType] = useState('original');
-  const [videoFormat, setVideoFormat] = useState('mp4');
-  const [loading, setLoading] = useState(false);
+export const createPaymentSession = async (req, res) => {
+  try {
+    const user = req.user;
 
-  const { credits, plan, fetchSubscription } = useAuth();
-  const navigate = useNavigate();
-
-  const handleExport = async () => {
-    if (!projectName.trim()) {
-      alert('Por favor, digite um nome para o projeto');
-      return;
+    if (!user || !user.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
     }
 
-    if (!mediaFiles.musicaOriginal && !mediaFiles.musicaInstrumental) {
-      alert('Por favor, faça upload de pelo menos um arquivo de áudio');
-      return;
+    const { currency } = req.body; // "usd" ou "brl"
+
+    // Buscar usuário no banco
+    const { data: profile, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (error || !profile) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    // BLOQUEIO FRONTEND
-    if (plan === 'free' && credits <= 0) {
-      alert('Você está sem créditos. Faça upgrade para continuar.');
-      navigate('/upgrade');
-      return;
+    // Escolher price dinamicamente
+    let priceId;
+
+    if (currency === 'usd') {
+      priceId = process.env.STRIPE_PRICE_USD;
+    } else {
+      priceId = process.env.STRIPE_PRICE_BRL;
     }
 
-    setLoading(true);
-
-    try {
-      // Consumir crédito (somente FREE)
-      if (plan === 'free') {
-        await api.post('/user/consume-credit');
-      }
-
-      // Gerar vídeo
-      const response = await api.post('/video/generate', {
-        projectName,
-        audioType: exportAudioType,
-        audioPath:
-          exportAudioType === 'original'
-            ? mediaFiles.musicaOriginal
-            : mediaFiles.musicaInstrumental,
-        backgroundType: mediaFiles.video
-          ? 'video'
-          : mediaFiles.imagem
-          ? 'image'
-          : 'color',
-        backgroundPath: mediaFiles.video || mediaFiles.imagem,
-        backgroundColor,
-        stanzas,
-        videoFormat
+    if (!priceId) {
+      return res.status(500).json({
+        error: 'Price ID não configurado no environment',
       });
-
-      const videoUrl = response.data.videoUrl;
-
-      if (fetchSubscription) {
-        await fetchSubscription();
-      }
-
-      window.open(videoUrl, '_blank');
-      alert('Vídeo gerado com sucesso!');
-
-    } catch (error) {
-      if (error.response?.status === 403) {
-        alert('Você está sem créditos. Faça upgrade para continuar.');
-        navigate('/upgrade');
-        return;
-      }
-
-      console.error('Erro ao gerar vídeo:', error);
-      alert('Erro ao gerar vídeo. Verifique seus arquivos e tente novamente.');
-    } finally {
-      setLoading(false);
     }
-  };
 
-  return (
-    <div className="export-panel">
-      <h2>Exportar Vídeo</h2>
+    // Criar sessão Stripe
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      mode: 'subscription',
+      customer_email: profile.email,
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      success_url: `${process.env.FRONTEND_URL}/success`,
+      cancel_url: `${process.env.FRONTEND_URL}/upgrade`,
+    });
 
-      <div className="export-form">
-        <div className="form-group">
-          <label>Nome do Projeto</label>
-          <input
-            type="text"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            placeholder="Digite o nome do projeto"
-          />
-        </div>
+    return res.json({ url: session.url });
 
-        <div className="form-group">
-          <label>Tipo de Áudio</label>
-          <div className="audio-type-selector">
-            <button
-              type="button"
-              className={exportAudioType === 'original' ? 'active' : ''}
-              onClick={() => setExportAudioType('original')}
-              disabled={!mediaFiles.musicaOriginal}
-            >
-              Música Original
-            </button>
-
-            <button
-              type="button"
-              className={exportAudioType === 'instrumental' ? 'active' : ''}
-              onClick={() => setExportAudioType('instrumental')}
-              disabled={!mediaFiles.musicaInstrumental}
-            >
-              Playback
-            </button>
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label>Formato do Vídeo</label>
-          <select
-            value={videoFormat}
-            onChange={(e) => setVideoFormat(e.target.value)}
-          >
-            <option value="mp4">MP4</option>
-            <option value="avi">AVI</option>
-            <option value="mov">MOV</option>
-            <option value="mkv">MKV</option>
-          </select>
-        </div>
-
-        <button
-          className="export-btn"
-          onClick={handleExport}
-          disabled={loading}
-        >
-          {loading ? (
-            <>
-              <Loader size={20} className="spinner" />
-              Gerando vídeo...
-            </>
-          ) : (
-            <>
-              <Download size={20} />
-              EXPORTAR VÍDEO
-            </>
-          )}
-        </button>
-      </div>
-    </div>
-  );
+  } catch (err) {
+    console.error('❌ Erro ao criar sessão Stripe:', err.message);
+    return res.status(500).json({
+      error: 'Erro ao criar sessão de pagamento',
+      details: err.message,
+    });
+  }
 };
 
-export default ExportPanel;
+export const getSubscriptionStatus = async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || !user.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
+    const { data: profile, error } = await supabase
+      .from('users')
+      .select('plan, credits')
+      .eq('id', user.id)
+      .single();
+
+    if (error || !profile) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    return res.json({
+      plan: profile.plan,
+      credits: profile.credits,
+    });
+
+  } catch (err) {
+    console.error('❌ Erro ao buscar assinatura:', err.message);
+    return res.status(500).json({
+      error: 'Erro ao buscar assinatura',
+    });
+  }
+};
