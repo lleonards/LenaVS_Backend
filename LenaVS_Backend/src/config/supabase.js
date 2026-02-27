@@ -13,10 +13,9 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 /* =====================================================
    🔐 CLIENTE ADMIN (SERVICE ROLE)
-   Ignora RLS – usar para backend
 ===================================================== */
 
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false
@@ -25,20 +24,19 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 
 /* =====================================================
    🔑 CLIENTE PÚBLICO (ANON)
-   Respeita RLS
 ===================================================== */
 
 const supabaseAnon = createClient(supabaseUrl, supabaseAnonKey);
 
 /* =====================================================
-   EXPORTS
+   EXPORTS (COMPATÍVEL COM TODO O PROJETO)
 ===================================================== */
 
-// ✅ Export default (resolve seu erro no deploy)
-export default supabaseAdmin;
+// ✅ Named export (para: import { supabase })
+export { supabase, supabaseAnon };
 
-// Mantém compatibilidade caso você use named imports em outro lugar
-export { supabaseAdmin, supabaseAnon };
+// ✅ Default export (para: import supabase from)
+export default supabase;
 
 export const supabaseConfig = {
   url: supabaseUrl,
