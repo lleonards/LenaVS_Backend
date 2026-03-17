@@ -157,8 +157,8 @@ function blockSimilarity(aWords, bWords) {
  * @returns {Array} [{text, startIdx, endIdx, startTime, endTime}|null]
  */
 function fuzzyMatchStanzas(stanzas, whisperWords) {
-  const MIN_SIMILARITY = 0.60;
-  const WINDOW_RATIO   = 1.4;   // janela um pouco maior que a estrofe (canto varia)
+  const MIN_SIMILARITY = 0.45;
+  const WINDOW_RATIO   = 1.1;   // janela um pouco maior que a estrofe (canto varia)
   const MIN_WINDOW     = 4;     // mínimo de palavras na janela
 
   const wNorm = whisperWords.map(w => normalizeWord(w.word));
@@ -169,7 +169,7 @@ function fuzzyMatchStanzas(stanzas, whisperWords) {
 
   for (const stanza of stanzas) {
     const stanzaText  = String(stanza.text || '');
-    const stanzaWords = extractWords(stanzaText);
+    const stanzaWords = extractWordsAllwShort(stanzaText);
 
     if (stanzaWords.length === 0) {
       results.push(null);
