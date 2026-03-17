@@ -169,7 +169,7 @@ function fuzzyMatchStanzas(stanzas, whisperWords) {
 
   for (const stanza of stanzas) {
     const stanzaText  = String(stanza.text || '');
-    const stanzaWords = extractWordsAllwShort(stanzaText);
+    const stanzaWords = extractWordsAllowShort(stanzaText);
 
     if (stanzaWords.length === 0) {
       results.push(null);
