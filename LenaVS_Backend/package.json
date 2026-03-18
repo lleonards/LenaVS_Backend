@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "build": "bash render_build.sh"
+    "build": "bash render-build.sh"
   },
   "keywords": ["video", "karaoke", "editor"],
   "author": "LenaVS",
