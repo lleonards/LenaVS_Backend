@@ -178,7 +178,7 @@ function blockSimilarity(aWords, bWords) {
  * @returns {Array} [{text, startIdx, endIdx, startTime, endTime}|null]
  */
 function fuzzyMatchStanzas(stanzas, whisperWords) {
-  const MIN_SIMILARITY = 0.28;
+  const MIN_SIMILARITY = 0.20;
   const WINDOW_RATIO   = 1.1;   // janela um pouco maior que a estrofe (canto varia)
   const MIN_WINDOW     = 4;     // mínimo de palavras na janela
 
