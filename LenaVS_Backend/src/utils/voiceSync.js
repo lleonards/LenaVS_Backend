@@ -233,7 +233,7 @@ function fuzzyMatchStanzas(stanzas, whisperWords) {
 
         // Heurística: ~0.5s por palavra (canto varia), com piso mínimo
         const expectedDuration = Math.max(0.6, stanzaWords.length * 0.5);
-        const durationPenalty  =  Math.min(1.2, expectedDuration / duration; // <1 quando janela é longa
+        const durationPenalty  =  Math.min(1.2, expectedDuration / duration); // <1 quando janela é longa
 
         let score = rawScore * (0.85 + 0.15 * durationPenalty);
 
