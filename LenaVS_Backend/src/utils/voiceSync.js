@@ -178,7 +178,7 @@ function blockSimilarity(aWords, bWords) {
  * @returns {Array} [{text, startIdx, endIdx, startTime, endTime}|null]
  */
 function fuzzyMatchStanzas(stanzas, whisperWords) {
-  const MIN_SIMILARITY = 0.45;
+  const MIN_SIMILARITY = 0.28;
   const WINDOW_RATIO   = 1.1;   // janela um pouco maior que a estrofe (canto varia)
   const MIN_WINDOW     = 4;     // mínimo de palavras na janela
 
@@ -233,9 +233,9 @@ function fuzzyMatchStanzas(stanzas, whisperWords) {
 
         // Heurística: ~0.5s por palavra (canto varia), com piso mínimo
         const expectedDuration = Math.max(0.6, stanzaWords.length * 0.5);
-        const durationPenalty  = expectedDuration / duration; // <1 quando janela é longa
+        const durationPenalty  =  Math.min(1.2, expectedDuration / duration; // <1 quando janela é longa
 
-        let score = rawScore * Math.min(1, durationPenalty);
+        let score = rawScore * (0.85 + 0.15 * durationPenalty);
 
         // ── Detectar "mistura" de estrofes (muitas palavras extras) ───────────
         let matchingWords = 0;
@@ -248,8 +248,8 @@ function fuzzyMatchStanzas(stanzas, whisperWords) {
           : 1;
 
         // Penalidade suave por faixas (não-binária)
-        if (extraWordsRatio > 0.40) score *= 0.60;
-        else if (extraWordsRatio > 0.25) score *= 0.80;
+        if (extraWordsRatio > 0.50) score *= 0.75;
+        else if (extraWordsRatio > 0.30) score *= 0.90;
 
         if (score > bestScore) {
           bestScore = score;
