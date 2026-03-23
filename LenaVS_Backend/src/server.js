@@ -16,7 +16,7 @@ import paymentRoutes from './routes/payment.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 
-// 🔥 Stripe Webhook
+// Stripe Webhook
 import { handlePaymentWebhook } from './controllers/paymentController.js';
 
 dotenv.config();
@@ -31,25 +31,22 @@ const __dirname = path.dirname(__filename);
    🌍 CORS
 ===================================================== */
 
-const allowedOrigins = [
-  'https://www.lenavs.com',
-  'https://lenavs.com',
-  'https://lenavs-frontend.onrender.com',
-  'http://localhost:5173'
-];
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',')
+  : [];
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Origem não permitida pelo CORS'));
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     }
+
+    return callback(null, false);
   },
   credentials: true
 }));
-
-app.options('*', cors());
 
 /* =====================================================
    🧱 SEGURANÇA E PERFORMANCE
@@ -65,7 +62,7 @@ app.use(morgan('combined'));
 app.use(compression());
 
 /* =====================================================
-   🔥 STRIPE WEBHOOK (ANTES DO JSON)
+   🔥 STRIPE WEBHOOK
 ===================================================== */
 
 app.post(
