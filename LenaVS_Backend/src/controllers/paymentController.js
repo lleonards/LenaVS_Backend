@@ -12,7 +12,7 @@ import {
 
 const STRIPE_PROVIDER = 'stripe';
 const MERCADO_PAGO_PROVIDER = 'mercadopago';
-const DEFAULT_MONTHLY_PRICE_BRL = Number(process.env.UNLIMITED_PRICE_BRL || 39.9);
+const DEFAULT_MONTHLY_PRICE_BRL = Number(process.env.UNLIMITED_PRICE_BRL || 29.9);
 const DEFAULT_MONTHLY_PRICE_USD = Number(process.env.UNLIMITED_PRICE_USD || 9.9);
 const MERCADO_PAGO_API_BASE = process.env.MERCADO_PAGO_API_BASE || 'https://api.mercadopago.com';
 
