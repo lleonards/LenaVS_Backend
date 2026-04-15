@@ -246,7 +246,6 @@ const createMercadoPagoPreference = async ({ profile, currency = 'brl', paymentM
   const excludedPaymentTypes = [
     { id: 'credit_card' },
     { id: 'debit_card' },
-    { id: 'account_money' },
   ];
 
   if (normalizedPaymentMethod === 'pix') {
