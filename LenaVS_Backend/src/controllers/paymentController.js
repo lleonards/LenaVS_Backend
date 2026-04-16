@@ -243,11 +243,13 @@ const createMercadoPagoPreference = async ({ profile, currency = 'brl', paymentM
   const returnUrls = getReturnUrls(MERCADO_PAGO_PROVIDER);
   const backendUrl = getBackendUrl();
   const normalizedPaymentMethod = String(paymentMethod || 'pix').toLowerCase();
-  const excludedPaymentTypes = [
-    { id: 'credit_card' },
-    { id: 'debit_card' },
-  ];
-
+  
+ const excludedPaymentTypes = [
+  { id: 'credit_card' },
+  { id: 'debit_card' },
+  { id: 'ticket' } // remove boleto
+];
+  
   if (normalizedPaymentMethod === 'pix') {
     excludedPaymentTypes.push({ id: 'ticket' });
   }
