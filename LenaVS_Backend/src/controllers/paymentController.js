@@ -12,7 +12,7 @@ import {
 
 const STRIPE_PROVIDER = 'stripe';
 const SELLX_PROVIDER = 'sellx';
-const DEFAULT_MONTHLY_PRICE_BRL = Number(process.env.UNLIMITED_PRICE_BRL || 39.9);
+const DEFAULT_MONTHLY_PRICE_BRL = Number(process.env.UNLIMITED_PRICE_BRL || 29.9);
 const DEFAULT_MONTHLY_PRICE_USD = Number(process.env.UNLIMITED_PRICE_USD || 9.9);
 const SELLX_API_BASE = process.env.SELLX_API_BASE || process.env.SELLAPP_API_BASE || 'https://sell.app/api';
 
