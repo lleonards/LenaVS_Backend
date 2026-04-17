@@ -692,15 +692,15 @@ export const createPaymentSession = async (req, res) => {
         profile,
         currency: 'brl',
       });
+     console.log('🔗 PAYMENT LINK RESPONSE:', paymentLink);
 
-      const sessionUrl = resolvePagarmeSessionUrl(paymentLink);
+const sessionUrl = resolvePagarmeSessionUrl(paymentLink);
 
-      if (!sessionUrl) {
-        return res.status(500).json({
-          error: 'A resposta do Pagar.me não retornou uma URL de checkout.',
-        });
-      }
-
+if (!sessionUrl) {
+  return res.status(500).json({
+    error: 'A resposta do Pagar.me não retornou uma URL de checkout.',
+  });
+}
       const paymentLinkId = String(paymentLink.id || paymentLink.payment_link_id || crypto.randomUUID());
 
       await upsertPaymentTransaction({
