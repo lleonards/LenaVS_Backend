@@ -362,19 +362,41 @@ const createPagarmePaymentLink = async ({ profile, currency = 'brl' }) => {
   const normalizedCurrency = String(currency || 'brl').toLowerCase();
   const pricing = getMonthlyPlanPricing(normalizedCurrency === 'usd' ? 'usd' : 'brl');
   const returnUrls = getReturnUrls(PAGARME_PROVIDER);
-  const amountInCents = Math.round(pricing.amount * 100);
+  const amountInCents = Math.round(Number(pricing.amount || 0) * 100);
   const reference = buildReferenceFromUserId(profile.id);
-  const itemCode = `lenavs-upgrade-${profile.id}`;
   const expiresInMinutes = Number(process.env.PAGARME_EXPIRES_IN_MINUTES || 1440);
   const template = parseJsonEnv(process.env.PAGARME_PAYMENT_LINK_TEMPLATE_JSON, {});
 
+  const productName = String(pricing.label || '').trim();
+  const productDescription = String(pricing.description || '').trim();
+
+  if (!productName) {
+    throw new Error('pricing.label não pode estar vazio para criar o payment link do Pagar.me');
+  }
+
+  if (!productDescription) {
+    throw new Error('pricing.description não pode estar vazio para criar o payment link do Pagar.me');
+  }
+
+  if (!Number.isInteger(amountInCents) || amountInCents <= 0) {
+    throw new Error('O valor do payment link do Pagar.me deve estar em centavos e ser maior que zero');
+  }
+
   const basePayload = compactObject({
-    name: `${pricing.label} [${reference}]`.slice(0, 64),
+    name: `${productName} [${reference}]`.slice(0, 64),
     type: String(process.env.PAGARME_LINK_TYPE || 'order').trim().toLowerCase() || 'order',
     expires_in: Number.isFinite(expiresInMinutes) && expiresInMinutes > 0 ? expiresInMinutes : 1440,
     max_paid_sessions: 1,
     payment_settings: {
-      accepted_payment_methods: getPagarmeAcceptedPaymentMethods(),
+      accepted_payment_methods: ['pix', 'credit_card'],
+      pix: {
+        expires_in: 3600,
+      },
+      credit_card: {
+  installments: {
+    max_installments: 1
+  }
+},
       success_url: returnUrls.success,
       pending_url: returnUrls.pending,
       canceled_url: returnUrls.cancel,
@@ -389,15 +411,15 @@ const createPagarmePaymentLink = async ({ profile, currency = 'brl' }) => {
     cart_settings: {
       items: [
         {
-          code: itemCode,
-          description: pricing.description,
+          name: productName,
+          description: productDescription,
           amount: amountInCents,
-          quantity: 1,
+          default_quantity: 1,
         },
       ],
     },
     layout_settings: {
-      title: pricing.label,
+      title: productName,
       success_url: returnUrls.success,
       pending_url: returnUrls.pending,
       canceled_url: returnUrls.cancel,
