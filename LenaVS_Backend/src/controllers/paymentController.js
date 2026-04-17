@@ -399,12 +399,7 @@ const createPagarmePaymentLink = async ({ profile, currency = 'brl' }) => {
       max_installments: 1
     }
   },
-
-  success_url: returnUrls.success,
-  pending_url: returnUrls.pending,
-  canceled_url: returnUrls.cancel,
-} 
-     success_url: returnUrls.success,
+      success_url: returnUrls.success,
       pending_url: returnUrls.pending,
       canceled_url: returnUrls.cancel,
     },
