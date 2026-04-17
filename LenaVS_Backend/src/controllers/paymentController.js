@@ -387,17 +387,24 @@ const createPagarmePaymentLink = async ({ profile, currency = 'brl' }) => {
     type: String(process.env.PAGARME_LINK_TYPE || 'order').trim().toLowerCase() || 'order',
     expires_in: Number.isFinite(expiresInMinutes) && expiresInMinutes > 0 ? expiresInMinutes : 1440,
     max_paid_sessions: 1,
-    payment_settings: {
-      accepted_payment_methods: ['pix', 'credit_card'],
-      pix: {
-        expires_in: 3600,
-      },
-      credit_card: {
-  installments: {
-    max_installments: 1
-  }
-},
-      success_url: returnUrls.success,
+   payment_settings: {
+  accepted_payment_methods: ['pix', 'credit_card'],
+  
+  pix_settings: {
+    expires_in: 3600
+  },
+
+  credit_card_settings: {
+    installments: {
+      max_installments: 1
+    }
+  },
+
+  success_url: returnUrls.success,
+  pending_url: returnUrls.pending,
+  canceled_url: returnUrls.cancel,
+} 
+     success_url: returnUrls.success,
       pending_url: returnUrls.pending,
       canceled_url: returnUrls.cancel,
     },
