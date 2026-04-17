@@ -387,22 +387,33 @@ const createPagarmePaymentLink = async ({ profile, currency = 'brl' }) => {
     type: String(process.env.PAGARME_LINK_TYPE || 'order').trim().toLowerCase() || 'order',
     expires_in: Number.isFinite(expiresInMinutes) && expiresInMinutes > 0 ? expiresInMinutes : 1440,
     max_paid_sessions: 1,
-   payment_settings: {
+  payment_settings: {
   accepted_payment_methods: ['pix', 'credit_card'],
-  
+
   pix_settings: {
-    expires_in: 3600
+    expires_in: 3600,
+    additional_information: [
+      {
+        name: 'Plano',
+        value: 'LenaVS 30 dias'
+      }
+    ]
   },
 
   credit_card_settings: {
-    installments: {
-      max_installments: 1
-    }
+    operation_type: 'auth_and_capture',
+    installments: [
+      {
+        number: 1,
+        total: amountInCents
+      }
+    ]
   },
-      success_url: returnUrls.success,
-      pending_url: returnUrls.pending,
-      canceled_url: returnUrls.cancel,
-    },
+
+  success_url: returnUrls.success,
+  pending_url: returnUrls.pending,
+  canceled_url: returnUrls.cancel
+},
     customer_settings: {
       customer: {
         name: nameFromEmail(profile.email),
