@@ -149,14 +149,16 @@ const getCodecOptionsByFormat = (format = 'mp4') => {
   }
 
   const baseOptions = [
-    '-c:v libx264',
-    '-preset medium',
-    '-crf 18',
-    '-pix_fmt yuv420p',
-    '-c:a aac',
-    '-b:a 192k',
-    '-shortest',
-  ];
+  '-c:v libx264',
+  '-preset veryfast',
+  '-crf 23',
+  '-pix_fmt yuv420p',
+  '-c:a aac',
+  '-b:a 192k',
+  '-r 30',
+  '-threads 2',
+  '-shortest',
+];
 
   if (normalized === 'mp4' || normalized === 'mov') {
     return [...baseOptions, '-movflags +faststart'];
