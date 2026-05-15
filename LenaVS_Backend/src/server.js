@@ -13,7 +13,11 @@ import paymentRoutes from './routes/payment.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 
-import { handlePagarmeWebhook, handleStripeWebhook } from './controllers/paymentController.js';
+import {
+  handlePagarmeWebhook,
+  handleStripeWebhook,
+} from './controllers/paymentController.js';
+
 import { initializeVideoTaskQueue } from './services/videoTaskQueue.js';
 
 dotenv.config();
@@ -21,12 +25,17 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+/* =========================================================
+   CORS
+========================================================= */
+
 const allowedOrigins = new Set([
   'https://www.lenavs.com',
   'https://lenavs.com',
   'https://lenavs-frontend.onrender.com',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+
   ...String(process.env.ALLOWED_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim())
@@ -35,7 +44,10 @@ const allowedOrigins = new Set([
 
 const isAllowedOrigin = (origin) => {
   if (!origin) return true;
-  if (allowedOrigins.has(origin)) return true;
+
+  if (allowedOrigins.has(origin)) {
+    return true;
+  }
 
   return (
     /^https:\/\/(.+\.)?lenavs\.com$/i.test(origin) ||
@@ -52,27 +64,162 @@ const corsOptions = {
       callback(new Error('Origem não permitida pelo CORS'));
     }
   },
+
   credentials: true,
+
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+  ],
 };
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
+/* =========================================================
+   SECURITY HEADERS
+========================================================= */
+
 app.use(
   helmet({
-    crossOriginResourcePolicy: false,
+    crossOriginEmbedderPolicy: false,
+
+    crossOriginResourcePolicy: {
+      policy: 'cross-origin',
+    },
+
+    contentSecurityPolicy: {
+      useDefaults: true,
+
+      directives: {
+        defaultSrc: ["'self'"],
+
+        baseUri: ["'self'"],
+
+        fontSrc: [
+          "'self'",
+          'https:',
+          'data:',
+        ],
+
+        imgSrc: [
+          "'self'",
+          'data:',
+          'blob:',
+          'https:',
+        ],
+
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          'https:',
+        ],
+
+        scriptSrc: [
+          "'self'",
+          'https://js.stripe.com',
+        ],
+
+        connectSrc: [
+          "'self'",
+          'https://*.supabase.co',
+          'https://api.stripe.com',
+          'https://js.stripe.com',
+          'https://api.pagar.me',
+          'https://api.openai.com',
+          'wss://*.supabase.co',
+        ],
+
+        frameSrc: [
+          "'self'",
+          'https://js.stripe.com',
+          'https://hooks.stripe.com',
+        ],
+
+        mediaSrc: [
+          "'self'",
+          'blob:',
+          'data:',
+          'https:',
+        ],
+
+        objectSrc: ["'none'"],
+
+        frameAncestors: ["'none'"],
+
+        upgradeInsecureRequests: [],
+      },
+    },
+
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+
+    referrerPolicy: {
+      policy: 'strict-origin-when-cross-origin',
+    },
+
+    xssFilter: true,
+
+    noSniff: true,
+
+    frameguard: {
+      action: 'deny',
+    },
   })
 );
 
+/* =========================================================
+   MIDDLEWARES
+========================================================= */
+
 app.use(morgan('combined'));
+
 app.use(compression());
 
-app.post('/api/payment/webhook/stripe', express.raw({ type: 'application/json' }), handleStripeWebhook);
-app.post('/api/payment/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
-app.post('/api/payment/webhook/pagarme', express.raw({ type: 'application/json' }), handlePagarmeWebhook);
+/* =========================================================
+   WEBHOOKS
+========================================================= */
+
+app.post(
+  '/api/payment/webhook/stripe',
+  express.raw({ type: 'application/json' }),
+  handleStripeWebhook
+);
+
+app.post(
+  '/api/payment/webhook',
+  express.raw({ type: 'application/json' }),
+  handleStripeWebhook
+);
+
+app.post(
+  '/api/payment/webhook/pagarme',
+  express.raw({ type: 'application/json' }),
+  handlePagarmeWebhook
+);
+
+/* =========================================================
+   BODY PARSER
+========================================================= */
 
 app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: '50mb',
+  })
+);
+
+/* =========================================================
+   HEALTH CHECKS
+========================================================= */
 
 app.get('/', (req, res) => {
   res.json({
@@ -90,13 +237,27 @@ app.get('/health', (req, res) => {
   });
 });
 
+/* =========================================================
+   ROUTES
+========================================================= */
+
 app.use('/api/auth', authRoutes);
+
 app.use('/api/user', userRoutes);
+
 app.use('/api/lyrics', lyricsRoutes);
+
 app.use('/api/video', videoRoutes);
+
 app.use('/api/projects', projectRoutes);
+
 app.use('/api/support', supportRoutes);
+
 app.use('/api/payment', paymentRoutes);
+
+/* =========================================================
+   404
+========================================================= */
 
 app.use((req, res) => {
   res.status(404).json({
@@ -105,13 +266,24 @@ app.use((req, res) => {
   });
 });
 
+/* =========================================================
+   ERROR HANDLER
+========================================================= */
+
 app.use((err, req, res, next) => {
   console.error('Erro não tratado:', err);
 
   res.status(err.status || 500).json({
-    error: err.message || 'Erro interno do servidor',
+    error:
+      process.env.NODE_ENV === 'production'
+        ? 'Erro interno do servidor'
+        : err.message,
   });
 });
+
+/* =========================================================
+   START SERVER
+========================================================= */
 
 const startServer = async () => {
   try {
@@ -119,11 +291,20 @@ const startServer = async () => {
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 LenaVS Backend rodando na porta ${PORT}`);
-      console.log('🎬 Processamento interno de vídeos inicializado');
-      console.log(`🗂️ Uploads persistentes via Supabase Storage no bucket ${process.env.SUPABASE_STORAGE_BUCKET || 'videos'}`);
+
+      console.log(
+        '🎬 Processamento interno de vídeos inicializado'
+      );
+
+      console.log(
+        `🗂️ Uploads persistentes via Supabase Storage no bucket ${
+          process.env.SUPABASE_STORAGE_BUCKET || 'videos'
+        }`
+      );
     });
   } catch (error) {
     console.error('Falha ao iniciar servidor:', error);
+
     process.exit(1);
   }
 };
