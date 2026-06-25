@@ -1,20 +1,35 @@
-#!/bin/bash
-# Script de build para Render.com
-# Instala FFmpeg, Python/Demucs e dependências do Node.js
+#!/usr/bin/env bash
+# Build script para Render
+# Instala dependências Node + Python para o backend da LenaVS
+# Sem usar apt-get, para evitar erro de filesystem read-only
 
-set -e
+set -euo pipefail
+
+echo "📦 Iniciando build da LenaVS Backend..."
 
 export PIP_ROOT_USER_ACTION=ignore
+export PYTHONUNBUFFERED=1
 
-echo "📦 Instalando FFmpeg, Python e fontes..."
-apt-get update -qq
-apt-get install -y -qq ffmpeg python3 python3-pip python3-venv fonts-dejavu-core fonts-liberation fonts-montserrat
+# Verifica se Python existe no ambiente
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "❌ python3 não encontrado no ambiente do Render."
+  echo "Configure o serviço para usar um ambiente com Python disponível, ou mude a estratégia do deploy do Demucs."
+  exit 1
+fi
 
-echo "📦 Atualizando pip e instalando PyTorch CPU + Demucs..."
-python3 -m pip install --no-input --upgrade pip setuptools wheel
-python3 -m pip install --no-input -r requirements-demucs.txt
+echo "🐍 Python encontrado: $(python3 --version)"
 
+# Atualiza pip e instala dependências Python do Demucs
+if [ -f requirements-demucs.txt ]; then
+  echo "📦 Instalando dependências Python do Demucs..."
+  python3 -m pip install --upgrade pip setuptools wheel
+  python3 -m pip install -r requirements-demucs.txt
+else
+  echo "⚠️ requirements-demucs.txt não encontrado. Pulando dependências Python."
+fi
+
+# Instala dependências do Node
 echo "📦 Instalando dependências do Node.js..."
 npm install
 
-echo "✅ Build concluído com Demucs local!"
+echo "✅ Build concluído com sucesso!"
