@@ -4,15 +4,27 @@ import nodemailer from 'nodemailer';
  * Configuração do transporter de email
  */
 const createTransporter = () => {
-  return nodemailer.createTransporter({
+  return nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: process.env.SMTP_PORT || 587,
-    secure: false,
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: false, // true somente para porta 465
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
   });
+};
+
+/**
+ * Escape simples para evitar problemas com HTML no email
+ */
+const escapeHtml = (text = '') => {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 };
 
 /**
@@ -28,26 +40,45 @@ export const sendErrorReport = async (errorData) => {
       subject: `[LenaVS] Relatório de Erro - ${new Date().toLocaleString('pt-BR')}`,
       html: `
         <h2>Relatório de Erro - LenaVS</h2>
-        <p><strong>Usuário:</strong> ${errorData.userEmail || 'Anônimo'}</p>
-        <p><strong>Data/Hora:</strong> ${new Date().toLocaleString('pt-BR')}</p>
+
+        <p>
+          <strong>Usuário:</strong>
+          ${escapeHtml(errorData.userEmail || 'Anônimo')}
+        </p>
+
+        <p>
+          <strong>Data/Hora:</strong>
+          ${new Date().toLocaleString('pt-BR')}
+        </p>
+
         <p><strong>Descrição:</strong></p>
-        <p>${errorData.description}</p>
+        <p>${escapeHtml(errorData.description || '')}</p>
+
         <hr>
+
         <p><strong>Informações Técnicas:</strong></p>
-        <pre>${JSON.stringify(errorData.technicalInfo || {}, null, 2)}</pre>
+        <pre>
+${escapeHtml(JSON.stringify(errorData.technicalInfo || {}, null, 2))}
+        </pre>
       `,
     };
 
     await transporter.sendMail(mailOptions);
-    return { success: true, message: 'Relatório enviado com sucesso' };
+
+    return {
+      success: true,
+      message: 'Relatório enviado com sucesso',
+    };
+
   } catch (error) {
     console.error('Erro ao enviar email:', error);
     throw new Error('Falha ao enviar relatório de erro');
   }
 };
 
+
 /**
- * Envia mensagem de contato de suporte com replyTo para o usuário.
+ * Envia mensagem de contato de suporte
  *
  * @param {{ name: string, email: string, description: string }} params
  */
@@ -67,24 +98,51 @@ export const sendSupportContact = async ({ name, email, description }) => {
       `Data/Hora: ${now}\n\n` +
       `Mensagem:\n\n${description}`;
 
+
     const mailOptions = {
       from: process.env.SMTP_USER,
       to: process.env.SUPPORT_EMAIL || 'suporte@lenavs.com',
       replyTo: email,
       subject: '[LenaVS] Novo contato de suporte',
+
       text: body,
+
       html: `
-        <p><strong>Nome:</strong> ${name}</p>
-        <p><strong>E-mail:</strong> ${email}</p>
-        <p><strong>Data/Hora:</strong> ${now}</p>
+        <h2>Novo contato de suporte - LenaVS</h2>
+
+        <p>
+          <strong>Nome:</strong>
+          ${escapeHtml(name)}
+        </p>
+
+        <p>
+          <strong>E-mail:</strong>
+          ${escapeHtml(email)}
+        </p>
+
+        <p>
+          <strong>Data/Hora:</strong>
+          ${escapeHtml(now)}
+        </p>
+
         <hr />
-        <p><strong>Mensagem:</strong></p>
-        <p>${description.replace(/\n/g, '<br />')}</p>
+
+        <p>
+          <strong>Mensagem:</strong>
+        </p>
+
+        <p>
+          ${escapeHtml(description).replace(/\n/g, '<br />')}
+        </p>
       `,
     };
 
     await transporter.sendMail(mailOptions);
-    return { success: true };
+
+    return {
+      success: true,
+    };
+
   } catch (error) {
     console.error('Erro ao enviar e-mail de suporte:', error);
     throw new Error('Falha ao enviar e-mail de suporte');
