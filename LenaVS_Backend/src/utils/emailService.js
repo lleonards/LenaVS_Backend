@@ -103,7 +103,7 @@ export const sendSupportContact = async ({ name, email, description }) => {
       from: process.env.SMTP_USER,
       to: process.env.SUPPORT_EMAIL || 'suporte@lenavs.com',
       replyTo: email,
-      subject: '[LenaVS] Novo contato de suporte',
+      subject: 'LenaVS | Suporte',
 
       text: body,
 
