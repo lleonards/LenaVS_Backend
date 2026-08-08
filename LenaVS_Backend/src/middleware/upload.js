@@ -117,6 +117,16 @@ const fileFilter = (req, file, cb) => {
   const extensionAllowed = rule.extensions.includes(ext);
   const mimeAllowed = isCompatibleMime(rule, normalizedMime, ext);
 
+console.log('[UPLOAD DEBUG]', {
+  field: file.fieldname,
+  originalname: file.originalname,
+  mimetype: file.mimetype,
+  normalizedMime,
+  ext,
+  extensionAllowed,
+  mimeAllowed,
+});
+
   if (extensionAllowed && mimeAllowed) {
     cb(null, true);
     return;
