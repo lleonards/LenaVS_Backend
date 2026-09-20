@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_ROOT_USER_ACTION=ignore \
@@ -7,9 +7,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 WORKDIR /app
 
-# =========================================================
-# Dependências do sistema
-# =========================================================
+# ---------------------------------------------------------
+# Sistema: Python + FFmpeg + ferramentas necessárias
+# ---------------------------------------------------------
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     python3 \
@@ -19,37 +19,40 @@ RUN apt-get update \
     ffmpeg \
     ca-certificates \
     build-essential \
+    g++ \
   && rm -rf /var/lib/apt/lists/*
 
-# =========================================================
+# ---------------------------------------------------------
 # Dependências Node.js
-# =========================================================
+# ---------------------------------------------------------
 COPY package.json package-lock.json* ./
 
 RUN npm ci --omit=dev
 
-# =========================================================
-# Ambiente Python do Demucs
-# =========================================================
+# ---------------------------------------------------------
+# Ambiente Python isolado para Demucs
+# Evita o erro PEP 668 do Debian Bookworm
+# ---------------------------------------------------------
 COPY requirements-demucs.txt ./
 
-# Criamos um ambiente virtual para evitar o bloqueio
-# PEP 668 do Python/Debian.
 RUN python3 -m venv /opt/lenavs-demucs \
-  && /opt/lenavs-demucs/bin/python -m pip install \
-       --upgrade pip setuptools wheel \
-  && /opt/lenavs-demucs/bin/python -m pip install \
-       -r requirements-demucs.txt
+  && /opt/lenavs-demucs/bin/python -m pip install --upgrade pip setuptools wheel \
+  && /opt/lenavs-demucs/bin/python -m pip install -r requirements-demucs.txt
 
-# Faz com que "python", "python3" e "pip" apontem
-# primeiro para o ambiente virtual do LenaVS.
+# Faz o Python do ambiente Demucs ficar disponível pelo PATH
 ENV PATH="/opt/lenavs-demucs/bin:$PATH"
 
-# =========================================================
+# ---------------------------------------------------------
 # Código da aplicação
-# =========================================================
+# ---------------------------------------------------------
 COPY . .
 
+# ---------------------------------------------------------
+# Porta usada pelo Render
+# ---------------------------------------------------------
 EXPOSE 10000
 
+# ---------------------------------------------------------
+# Inicialização
+# ---------------------------------------------------------
 CMD ["npm", "start"]
